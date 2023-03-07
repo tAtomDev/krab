@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn math_operators() {
         let code = r#"
-            let a = 10 + 5 - 3 * 2 / 4;
+            let a = 10 + 5 - 3.5 * 2 / 4;
             let b = ((a + 1) * 2 - 4) % 3;
         "#;
 
@@ -360,7 +360,7 @@ mod tests {
                 Operator(Add),
                 Literal(super::Literal::Integer(5)),
                 Operator(Subtract),
-                Literal(super::Literal::Integer(3)),
+                Literal(super::Literal::Float(3.5)),
                 Operator(Multiply),
                 Literal(super::Literal::Integer(2)),
                 Operator(Divide),
