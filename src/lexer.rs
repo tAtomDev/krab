@@ -1,6 +1,6 @@
 use crate::util;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Token {
     Keyword(Keyword),
     Literal(Literal),
@@ -11,7 +11,7 @@ pub enum Token {
     Invalid,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Literal {
     Integer(i32),
     Float(f32),
@@ -19,7 +19,7 @@ pub enum Literal {
     Boolean(bool),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum Keyword {
     Let,
     If,
@@ -31,7 +31,7 @@ pub enum Keyword {
     Continue,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum Operator {
     Add,
     Subtract,
@@ -44,6 +44,7 @@ pub enum Operator {
     Not,
     Assignment,
     Equal,
+    NotEqual,
     Less,
     Greater,
     LessOrEqual,
@@ -51,7 +52,47 @@ pub enum Operator {
     Arrow,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl Operator {
+    pub const fn is_binary(self) -> bool {
+        matches!(
+            self,
+            Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Divide
+                | Operator::Modulo
+        )
+    }
+
+    pub const fn precedence(self) -> u8 {
+        match self {
+            Operator::Add | Operator::Subtract => 1,
+            Operator::Multiply | Operator::Divide | Operator::Modulo => 2,
+            Operator::Equal | Operator::NotEqual => 3,
+            Operator::Less
+            | Operator::LessOrEqual
+            | Operator::Greater
+            | Operator::GreaterOrEqual => 4,
+            _ => 5,
+        }
+    }
+
+    pub const fn associativity(&self) -> Associativity {
+        if self.is_binary() {
+            Associativity::Left
+        } else {
+            Associativity::None
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+pub enum Associativity {
+    Left,
+    None,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum Punctuation {
     OpenParenthesis,  // (
     CloseParenthesis, // )
@@ -217,7 +258,7 @@ impl Lexer {
 
     fn number(&mut self, first_number: char) -> Token {
         let mut string = String::new();
-        let mut failed = true;
+        let mut failed = false;
         let mut is_float = false;
 
         string.push(first_number);
@@ -230,7 +271,6 @@ impl Lexer {
 
                 is_float = true;
             } else if !self.current_char().is_ascii_digit() {
-                failed = false;
                 break;
             }
 
@@ -238,7 +278,7 @@ impl Lexer {
         }
 
         if failed {
-            panic!("Invalid number literal");
+            panic!("Invalid number literal: {}", string);
         }
 
         if is_float {
