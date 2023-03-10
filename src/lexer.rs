@@ -229,7 +229,7 @@ impl Lexer {
                 }
 
                 is_float = true;
-            } else if !self.current_char().is_digit(9) {
+            } else if !self.current_char().is_ascii_digit() {
                 failed = false;
                 break;
             }
@@ -255,7 +255,7 @@ impl Lexer {
 
         while !self.is_at_end() {
             let current_char = self.current_char();
-            if !util::is_char_valid_identifier(current_char) {
+            if util::can_lexer_skip(current_char) {
                 break;
             }
 
@@ -283,7 +283,7 @@ impl Lexer {
         while !self.is_at_end() {
             let current_char = self.current_char();
 
-            if current_char != '_' && !util::is_char_valid_identifier(current_char) {
+            if current_char != '_' && util::can_lexer_skip(current_char) {
                 break;
             }
 
