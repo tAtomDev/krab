@@ -1,4 +1,4 @@
-use crate::util;
+use crate::{common, util};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Token {
@@ -192,7 +192,13 @@ impl Lexer {
             '/' => Token::Operator(Operator::Divide),
             '%' => Token::Operator(Operator::Modulo),
             '^' => Token::Operator(Operator::Power),
-            '!' => Token::Operator(Operator::Not),
+            '!' => {
+                if self.check_char_and_advance('=') {
+                    Token::Operator(Operator::NotEqual)
+                } else {
+                    Token::Operator(Operator::Not)
+                }
+            }
 
             '=' => {
                 if self.check_char_and_advance('=') {
@@ -258,7 +264,6 @@ impl Lexer {
 
     fn number(&mut self, first_number: char) -> Token {
         let mut string = String::new();
-        let mut failed = false;
         let mut is_float = false;
 
         string.push(first_number);
@@ -275,10 +280,6 @@ impl Lexer {
             }
 
             string.push(self.advance_char());
-        }
-
-        if failed {
-            panic!("Invalid number literal: {}", string);
         }
 
         if is_float {

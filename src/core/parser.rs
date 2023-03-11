@@ -1,7 +1,9 @@
 use crate::{
-    ast::{Expression, Identifier, IdentifierKind, Node, Statement},
-    lexer::{Associativity, Literal, Operator, Punctuation, Token},
+    ast::{Expression, Identifier, IdentifierKind, Statement},
+    lexer::{Punctuation, Token},
 };
+
+use super::lexer::Associativity;
 
 pub struct Parser {
     position: usize,
@@ -54,15 +56,31 @@ impl Parser {
 
     fn parse_binary(&mut self, min_precedence: u8) -> Expression {
         let mut lhs = self.parse_primary();
-        while let Token::Operator(operator) = self.current_token().clone() {
+        loop {
+            let operator = self.current_token().clone();
+            let Token::Operator(operator) = operator else {
+                if operator == Token::Eof {
+                    break;
+                }
+
+                panic!("Expected operator, found '{:?}'", operator);
+            };
+
             let operator_precedence = operator.precedence();
             if operator_precedence < min_precedence {
                 break;
             }
+
             self.advance_token();
-            let rhs = self.parse_binary(operator_precedence + 1);
+            let rhs = if operator.associativity() == Associativity::Left {
+                self.parse_binary(operator_precedence + 1)
+            } else {
+                self.parse_binary(operator_precedence)
+            };
+
             lhs = Expression::Binary(Box::new(lhs), operator, Box::new(rhs));
         }
+
         lhs
     }
 
@@ -71,7 +89,11 @@ impl Parser {
 
         match token {
             Token::Identifier(name) => Expression::Identifier(Identifier {
-                kind: IdentifierKind::Variable,
+                kind: if self.current_token() == &Token::Punctuation(Punctuation::OpenParenthesis) {
+                    IdentifierKind::Function
+                } else {
+                    IdentifierKind::Variable
+                },
                 name,
             }),
             Token::Literal(literal) => Expression::Literal(literal),
@@ -84,7 +106,6 @@ impl Parser {
 
                 expr
             }
-
             _ => panic!("Trying to parse unexpected token: {:?}", token),
         }
     }
