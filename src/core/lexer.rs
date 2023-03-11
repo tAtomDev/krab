@@ -1,4 +1,4 @@
-use crate::{common, util};
+use crate::util;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Token {

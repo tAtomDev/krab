@@ -10,7 +10,8 @@ pub type Body = Vec<Statement>;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Statement {
-    Assignment(Identifier, Box<Expression>),
+    VariableDeclaration(String, Box<Expression>),
+    Assignment(String, Box<Expression>),
     Expression(Expression),
     Return(Expression),
     While {

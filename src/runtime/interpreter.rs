@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     common::Value,
     core::{
@@ -9,36 +7,46 @@ use crate::{
     },
 };
 
-// pub struct Environment {
-//     pub variables: HashMap<String, Value>,
-// }
+use super::Environment;
 
-pub struct Interpreter;
+pub struct Interpreter {
+    pub environment: Environment,
+}
 
 impl Interpreter {
-    pub fn evaluate(&self, src: &str) -> Option<Value> {
+    pub fn new() -> Self {
+        Self {
+            environment: Environment::new(None),
+        }
+    }
+
+    pub fn evaluate(&mut self, src: &str) -> Value {
         let lex = Lexer::new(src).lex();
         let program = Parser::new(lex).parse();
 
-        let mut last_value = None;
-        for statement in program {
-            let evaluated = self.evaluate_statement(statement);
-            if let Some(value) = last_value.clone() {
-                let sum: anyhow::Result<Value> = value + evaluated;
-                if let Ok(sum_value) = sum {
-                    last_value = Some(sum_value);
-                }
-            } else {
-                last_value = Some(evaluated);
-            }
-        }
-
-        last_value
+        program
+            .into_iter()
+            .map(|statement| self.evaluate_statement(statement))
+            .fold(Value::Nothing, |acc, evaluated| {
+                (acc + evaluated).unwrap_or(Value::Nothing)
+            })
     }
 
-    fn evaluate_statement(&self, statement: Statement) -> Value {
+    fn evaluate_statement(&mut self, statement: Statement) -> Value {
         match statement {
             Statement::Expression(expression) => self.evaluate_expression(expression),
+            Statement::VariableDeclaration(identifier, expression) => {
+                let value = self.evaluate_expression(*expression);
+                self.environment.declare_variable(identifier, value.clone());
+
+                value
+            }
+            Statement::Assignment(identifier, expression) => {
+                let value = self.evaluate_expression(*expression);
+                self.environment.assign_variable(identifier, value.clone());
+
+                value
+            }
             _ => unimplemented!(),
         }
     }
@@ -47,6 +55,13 @@ impl Interpreter {
         match expression {
             Expression::Literal(literal) => literal.into(),
             Expression::Binary(..) => self.evaluate_binary_expression(expression),
+            Expression::Identifier(identifier) => {
+                if identifier.kind == IdentifierKind::Function {
+                    panic!("Functions not yet implemented");
+                }
+
+                self.environment.get_variable(&identifier.name).clone()
+            }
             _ => todo!(),
         }
     }

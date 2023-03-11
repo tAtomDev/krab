@@ -5,23 +5,18 @@ mod util;
 
 use std::io::{self, BufRead, Write};
 
-use crate::{core::*, runtime::Interpreter};
+use crate::{common::Value, core::*, runtime::Interpreter};
 
 use lexer::*;
 use parser::*;
 
-const CODE: &str = r#"
-fn main() {
-    let x = "Hello, world!";
-    print(x);
-}
-"#;
-
 fn main() {
     print!("\x1B[2J\x1B[1;1H");
-    println!("\x1b[32m- Krab 0.1 REPL\nType 'exit' to leave or 'clear' to clear terminal.\x1b[0m");
+    println!(
+        "\x1b[32m- Krab 0.1 REPL\nType 'exit' to leave or 'clear' to clear the terminal.\x1b[0m"
+    );
 
-    let interpreter = Interpreter;
+    let mut interpreter = Interpreter::new();
 
     let mut buffer = String::with_capacity(2048);
     let mut stdin = io::stdin().lock();
@@ -37,31 +32,50 @@ fn main() {
             break;
         }
 
+        print!("\x1b[0m");
+        io::stdout().flush().unwrap();
+
         if buffer == "clear" {
-            print!("\x1b[0m\x1B[2J\x1B[1;1H");
+            print!("\x1B[2J\x1B[1;1H");
             continue;
         }
 
-        if buffer.starts_with("lex") {
+        if buffer.starts_with("/lex") {
             buffer = buffer.split_off(4);
             let lex = Lexer::new(&buffer).lex();
-            println!("\x1b[0m{:?}", lex);
+            println!("{lex:?}");
             continue;
         }
 
-        if buffer.starts_with("parse") {
+        if buffer.starts_with("/parse") {
             buffer = buffer.split_off(6);
             let program = Parser::new(Lexer::new(&buffer).lex()).parse();
-            println!("\x1b[0m{:?}", program);
+            println!("{program:?}");
+            continue;
+        }
+
+        if buffer.starts_with("/vars") {
+            if interpreter.environment.variables.is_empty() {
+                println!("No variables declared");
+                continue;
+            }
+
+            let variables = interpreter
+                .environment
+                .variables
+                .iter()
+                .fold(String::new(), |acc, (name, value)| {
+                    format!("{acc}\n\"{name}\" = {value:?}")
+                });
+
+            println!("\x1b[36m{}\x1b[0m", variables.trim());
             continue;
         }
 
         let value = interpreter.evaluate(&buffer);
 
-        if let Some(value) = value {
-            println!("\x1b[0m{:?}", value);
-        } else {
-            println!("\x1b[0mundefined");
+        if value != Value::Nothing {
+            println!("{}", value);
         }
     }
 

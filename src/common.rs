@@ -9,6 +9,7 @@ use crate::core::lexer::Literal;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
+    Nothing,
     Integer(i32),
     Float(f32),
     Boolean(bool),
@@ -18,9 +19,10 @@ pub enum Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Integer(v) => write!(f, "{}i", v),
-            Self::Float(v) => write!(f, "{}f", v),
-            Self::Boolean(v) => write!(f, "{}b", v),
+            Self::Nothing => write!(f, "()"),
+            Self::Integer(v) => write!(f, "{}", v),
+            Self::Float(v) => write!(f, "{:?}", v),
+            Self::Boolean(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
         }
     }
@@ -73,6 +75,10 @@ macro_rules! impl_value_op {
             type Output = anyhow::Result<Value>;
 
             fn $op(self, rhs: Self) -> Self::Output {
+                if self == Self::Nothing {
+                    return Ok(rhs);
+                }
+
                 match self {
                     Self::Integer(v) => {
                         let rhs = rhs

@@ -3,7 +3,7 @@ use crate::{
     lexer::{Punctuation, Token},
 };
 
-use super::lexer::Associativity;
+use super::lexer::{Associativity, Keyword, Operator};
 
 pub struct Parser {
     position: usize,
@@ -31,6 +31,22 @@ impl Parser {
         *token == Token::Eof
     }
 
+    fn expect_token(&mut self, token: Token) {
+        if self.advance_token() != token {
+            panic!(
+                "Expected token: {:?}, but found {:?}",
+                token,
+                self.current_token()
+            )
+        }
+    }
+
+    fn expect_semicolon(&mut self) {
+        if self.advance_token() != Token::Punctuation(Punctuation::Semicolon) {
+            panic!("Expected semicolon ';'");
+        }
+    }
+
     fn advance_token(&mut self) -> Token {
         self.position += 1;
         self.tokens.get(self.position - 1).unwrap().clone()
@@ -47,7 +63,58 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Statement {
-        Statement::Expression(self.parse_expression())
+        let token = self.current_token();
+        match *token {
+            Token::Identifier(_) => self.parse_identifier(),
+            Token::Literal(_) => Statement::Expression(self.parse_expression()),
+            Token::Keyword(_) => self.parse_keyword(),
+            Token::Invalid => panic!("Invalid token: {:?}", token),
+            Token::Eof => unreachable!(),
+            _ => todo!(),
+        }
+    }
+
+    fn parse_identifier(&mut self) -> Statement {
+        let Token::Identifier(identifier) = self.advance_token() else {
+            panic!("Expected identifier at parse_identifier");
+        };
+
+        match self.advance_token() {
+            Token::Operator(Operator::Assignment) => {
+                let expression = self.parse_expression();
+
+                self.expect_semicolon();
+
+                Statement::Assignment(identifier, Box::new(expression))
+            }
+            _ => Statement::Expression(Expression::Identifier(Identifier {
+                kind: IdentifierKind::Variable,
+                name: identifier,
+            })),
+        }
+    }
+
+    fn parse_keyword(&mut self) -> Statement {
+        let Token::Keyword(keyword) = self.advance_token() else {
+            panic!("Expected keyword at parse_keyword");
+        };
+
+        match keyword {
+            Keyword::Let => {
+                let Token::Identifier(identifier) = self.advance_token() else {
+                    panic!("Expected identifier after `let` keyword");
+                };
+
+                self.expect_token(Token::Operator(Operator::Assignment));
+
+                let expression = self.parse_expression();
+
+                self.expect_semicolon();
+
+                Statement::VariableDeclaration(identifier, Box::new(expression))
+            }
+            _ => panic!("Keyword {:?} not yet implemented", keyword),
+        }
     }
 
     fn parse_expression(&mut self) -> Expression {
@@ -59,7 +126,7 @@ impl Parser {
         loop {
             let operator = self.current_token().clone();
             let Token::Operator(operator) = operator else {
-                if operator == Token::Eof {
+                if operator == Token::Eof || operator == Token::Punctuation(Punctuation::CloseParenthesis) || operator == Token::Punctuation(Punctuation::Semicolon) {
                     break;
                 }
 
