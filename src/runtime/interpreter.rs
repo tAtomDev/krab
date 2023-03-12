@@ -23,13 +23,13 @@ impl Interpreter {
         program
             .into_iter()
             .map(|statement| self.evaluate_statement(statement))
-            .fold(Value::Nothing, |acc, evaluated| {
-                (acc + evaluated).unwrap_or(Value::Nothing)
-            })
+            .last()
+            .unwrap_or(Value::Nothing)
     }
 
     fn evaluate_statement(&mut self, statement: Statement) -> Value {
         match statement {
+            Statement::Empty => Value::Nothing,
             Statement::Expression(expression) => self.evaluate_expression(expression),
             Statement::VariableDeclaration {
                 is_const,

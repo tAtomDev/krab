@@ -30,7 +30,7 @@ pub enum Keyword {
     Continue,
 }
 
-impl Keyword {}
+pub const SEMICOLON_TOKEN: Token = Token::Punctuation(Punctuation::Semicolon);
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum Operator {

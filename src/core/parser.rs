@@ -16,6 +16,19 @@ impl Parser {
         }
     }
 
+    pub fn parse(&mut self) -> Vec<Statement> {
+        let mut program = Vec::new();
+
+        while !self.is_at_end() {
+            let statement = self.parse_statement();
+            if statement != Statement::Empty {
+                program.push(statement);
+            }
+        }
+
+        program
+    }
+
     pub fn current_token(&self) -> &Token {
         if self.is_at_end() {
             &Token::Eof
@@ -45,19 +58,13 @@ impl Parser {
         }
     }
 
+    fn return_positions(&mut self, positions: usize) {
+        self.position -= positions;
+    }
+
     fn advance_token(&mut self) -> Token {
         self.position += 1;
         self.tokens.get(self.position - 1).unwrap().clone()
-    }
-
-    pub fn parse(&mut self) -> Vec<Statement> {
-        let mut program = Vec::new();
-
-        while !self.is_at_end() {
-            program.push(self.parse_statement());
-        }
-
-        program
     }
 
     fn parse_statement(&mut self) -> Statement {
@@ -66,9 +73,20 @@ impl Parser {
             Token::Identifier(_) => self.parse_identifier(),
             Token::Literal(_) => Statement::Expression(self.parse_expression()),
             Token::Keyword(_) => self.parse_keyword(),
+            Token::Punctuation(Punctuation::Semicolon) => {
+                self.advance_token();
+                Statement::Empty
+            }
             Token::Invalid => panic!("Invalid token: {:?}", token),
             Token::Eof => unreachable!(),
-            _ => todo!(),
+            _ => {
+                let expr = self.parse_expression();
+                if self.current_token() == &SEMICOLON_TOKEN {
+                    self.advance_token();
+                }
+
+                Statement::Expression(expr)
+            }
         }
     }
 
@@ -77,18 +95,19 @@ impl Parser {
             panic!("Expected identifier at parse_identifier");
         };
 
-        match self.advance_token() {
+        match self.current_token() {
             Token::Operator(Operator::Assignment) => {
+                self.advance_token();
                 let expression = self.parse_expression();
 
                 self.expect_semicolon();
 
                 Statement::Assignment(identifier, Box::new(expression))
             }
-            _ => Statement::Expression(Expression::Identifier(Identifier {
-                kind: IdentifierKind::Variable,
-                name: identifier,
-            })),
+            _ => {
+                self.return_positions(1);
+                Statement::Expression(self.parse_expression())
+            }
         }
     }
 
@@ -106,7 +125,7 @@ impl Parser {
 
     fn declare_variable(&mut self, is_const: bool) -> Statement {
         let Token::Identifier(identifier) = self.advance_token() else {
-            panic!("Expected identifier after `let` keyword");
+            panic!("Expected a valid identifier");
         };
 
         self.expect_token(Token::Operator(Operator::Assignment));
@@ -131,7 +150,7 @@ impl Parser {
         loop {
             let operator = self.current_token().clone();
             let Token::Operator(operator) = operator else {
-                if operator == Token::Eof || operator == Token::Punctuation(Punctuation::CloseParenthesis) || operator == Token::Punctuation(Punctuation::Semicolon) {
+                if operator == Token::Eof || operator == Token::Punctuation(Punctuation::CloseParenthesis) || operator == SEMICOLON_TOKEN {
                     break;
                 }
 
@@ -161,11 +180,7 @@ impl Parser {
 
         match token {
             Token::Identifier(name) => Expression::Identifier(Identifier {
-                kind: if self.current_token() == &Token::Punctuation(Punctuation::OpenParenthesis) {
-                    IdentifierKind::Function
-                } else {
-                    IdentifierKind::Variable
-                },
+                kind: IdentifierKind::Variable,
                 name,
             }),
             Token::Literal(literal) => Expression::Literal(literal),
@@ -180,5 +195,76 @@ impl Parser {
             }
             _ => panic!("Trying to parse unexpected token: {:?}", token),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::lexer::Lexer;
+
+    #[test]
+    fn basic_variable() {
+        let code = r#"
+            let x = 1 + 1;
+            x = 5;
+        "#;
+
+        let program = Parser::new(Lexer::new(code).lex()).parse();
+        assert_eq!(
+            program,
+            vec![
+                Statement::VariableDeclaration {
+                    name: "x".into(),
+                    value_expression: Box::new(Expression::Binary(
+                        Box::new(Expression::Literal(Literal::Integer(1))),
+                        Operator::Add,
+                        Box::new(Expression::Literal(Literal::Integer(1)))
+                    )),
+                    is_const: false
+                },
+                Statement::Assignment(
+                    "x".into(),
+                    Box::new(Expression::Literal(Literal::Integer(5)))
+                )
+            ]
+        )
+    }
+
+    #[test]
+    fn complex_math_expression() {
+        let code = "let x = x * ((2 + 3 * 4) / (5 - 1));";
+        let program = Parser::new(Lexer::new(code).lex()).parse();
+        assert_eq!(
+            program,
+            vec![Statement::VariableDeclaration {
+                name: "x".into(),
+                value_expression: Box::new(Expression::Binary(
+                    Box::new(Expression::Identifier(Identifier {
+                        kind: IdentifierKind::Variable,
+                        name: "x".into()
+                    })),
+                    Operator::Multiply,
+                    Box::new(Expression::Binary(
+                        Box::new(Expression::Binary(
+                            Box::new(Expression::Literal(Literal::Integer(2))),
+                            Operator::Add,
+                            Box::new(Expression::Binary(
+                                Box::new(Expression::Literal(Literal::Integer(3))),
+                                Operator::Multiply,
+                                Box::new(Expression::Literal(Literal::Integer(4)))
+                            )),
+                        )),
+                        Operator::Divide,
+                        Box::new(Expression::Binary(
+                            Box::new(Expression::Literal(Literal::Integer(5))),
+                            Operator::Subtract,
+                            Box::new(Expression::Literal(Literal::Integer(1)))
+                        )),
+                    ))
+                )),
+                is_const: false,
+            }]
+        );
     }
 }

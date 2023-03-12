@@ -120,7 +120,7 @@ impl Lexer {
 
             '"' | '\'' => self.string(c),
             c if c.is_ascii_digit() => self.number(c),
-            c if c.is_alphabetic() => self.keyword_or_identifier(c),
+            c if c.is_alphabetic() || c == '_' => self.keyword_or_identifier(c),
             _ => Token::Invalid,
         };
 
@@ -218,8 +218,15 @@ impl Lexer {
         while !self.is_at_end() {
             let current_char = self.current_char();
 
-            if current_char != '_' && util::can_lexer_skip(current_char) {
+            if current_char == ';' || current_char != '_' && util::can_lexer_skip(current_char) {
                 break;
+            }
+
+            if !current_char.is_ascii_whitespace()
+                && current_char != '_'
+                && !current_char.is_ascii_alphanumeric()
+            {
+                panic!("Character '{current_char}' is not valid for identifiers");
             }
 
             string.push(self.advance_char());
