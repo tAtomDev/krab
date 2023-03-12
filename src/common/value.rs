@@ -105,8 +105,8 @@ macro_rules! impl_value_op {
                         Ok(Self::Float(v.$op(rhs)))
                     }
                     _ => bail!(concat!(
-                        "this type cannot be ",
-                        stringify!($op_name),
+                        "these types cannot be ",
+                        stringify!($op),
                         "ed together"
                     )),
                 }
