@@ -11,8 +11,6 @@ use crate::{
 
 use super::Environment;
 
-use thiserror::Error;
-
 #[derive(Debug)]
 pub enum RuntimeError {
     LexicalError(LexicalError),
@@ -110,7 +108,6 @@ impl Interpreter {
                     .value
                     .clone()
             }
-            _ => todo!(),
         }
     }
 
