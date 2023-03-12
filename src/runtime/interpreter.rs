@@ -17,6 +17,9 @@ pub enum RuntimeError {
     #[error("Parser Error: {0}")]
     ParserError(ParserError),
 
+    #[error("Runtime Error: invalid type arithmetic")]
+    InvalidType,
+
     #[error("Runtime Error: variable `{0}` not found in this scope")]
     VariableNotFound(String),
     #[error("Runtime Error: cannot redeclare variable `{0}`")]
@@ -126,15 +129,15 @@ impl Interpreter {
         let rhs = self.evaluate_expression(*rhs)?;
 
         let value = match op {
-            Operator::Add => (lhs + rhs).unwrap(),
-            Operator::Subtract => (lhs - rhs).unwrap(),
-            Operator::Multiply => (lhs * rhs).unwrap(),
-            Operator::Divide => (lhs / rhs).unwrap(),
-            Operator::Modulo => (lhs % rhs).unwrap(),
+            Operator::Add => (lhs + rhs).map_err(|_| RuntimeError::InvalidType),
+            Operator::Subtract => (lhs - rhs).map_err(|_| RuntimeError::InvalidType),
+            Operator::Multiply => (lhs * rhs).map_err(|_| RuntimeError::InvalidType),
+            Operator::Divide => (lhs / rhs).map_err(|_| RuntimeError::InvalidType),
+            Operator::Modulo => (lhs % rhs).map_err(|_| RuntimeError::InvalidType),
             _ => panic!("Invalid operator provided"),
         };
 
-        Ok(value)
+        value
     }
 }
 
