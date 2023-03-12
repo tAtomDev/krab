@@ -19,6 +19,8 @@ pub enum RuntimeError {
 
     #[error("Runtime Error: invalid type arithmetic")]
     InvalidType,
+    #[error("Runtime Error: expected a boolean")]
+    ExpectedBoolean,
 
     #[error("Runtime Error: variable `{0}` not found in this scope")]
     VariableNotFound(String),
@@ -107,6 +109,12 @@ impl Interpreter {
                 let evaluated = self.evaluate_expression(*expression)?;
                 if op == Operator::Subtract {
                     (-evaluated).unwrap()
+                } else if op == Operator::Not {
+                    if let Value::Boolean(bool) = evaluated {
+                        Value::Boolean(!bool)
+                    } else {
+                        return Err(RuntimeError::ExpectedBoolean);
+                    }
                 } else {
                     evaluated
                 }
@@ -140,6 +148,8 @@ impl Interpreter {
             Operator::Multiply => (lhs * rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Divide => (lhs / rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Modulo => (lhs % rhs).map_err(|_| RuntimeError::InvalidType),
+            Operator::Equal => Ok(Value::Boolean(lhs == rhs)),
+            Operator::NotEqual => Ok(Value::Boolean(lhs != rhs)),
             _ => panic!("Invalid operator provided"),
         }
     }

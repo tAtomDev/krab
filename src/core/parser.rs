@@ -246,8 +246,10 @@ impl Parser {
                 }
 
                 let expression = self.parse_primary()?;
-                if let Expression::Unary(_, _) = &expression {
-                    return Err(ParserError::InvalidUnaryExpression);
+                if let Expression::Unary(op, _) = &expression {
+                    if op != &Operator::Not {
+                        return Err(ParserError::InvalidUnaryExpression);
+                    }
                 }
 
                 Expression::Unary(operator, Box::new(expression))
