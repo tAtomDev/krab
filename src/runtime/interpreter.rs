@@ -96,3 +96,29 @@ impl Interpreter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::{BufReader, Read}};
+
+    use super::*;
+
+    fn _create_interpreter_and_read_file(file_name: &str) -> (Interpreter, String) {
+        let file = File::open(file_name).unwrap();
+
+        let mut buf_reader = BufReader::new(file);
+        let mut content = String::with_capacity(1024);
+
+        buf_reader.read_to_string(&mut content).unwrap();
+
+        (Interpreter::new(), content)
+    }
+
+    #[test]
+    fn basic_math() {
+        let (mut interpreter, content) = _create_interpreter_and_read_file("./examples/basic_math.krab");
+        let evaluated = interpreter.evaluate(&content);
+
+        assert_eq!(evaluated, Value::Integer(1))
+    }
+}
