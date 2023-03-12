@@ -2,9 +2,15 @@ use std::collections::HashMap;
 
 use crate::common::Value;
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct Variable {
+    pub value: Value,
+    pub is_const: bool,
+}
+
 pub struct Environment {
     pub parent: Option<Box<Environment>>,
-    pub variables: HashMap<String, Value>,
+    pub variables: HashMap<String, Variable>,
 }
 
 impl Environment {
@@ -15,13 +21,19 @@ impl Environment {
         }
     }
 
-    pub fn declare_variable(&mut self, variable_name: impl Into<String>, value: Value) {
+    pub fn declare_variable(
+        &mut self,
+        variable_name: impl Into<String>,
+        value: Value,
+        is_const: bool,
+    ) {
         let variable_name = variable_name.into();
         if self.variables.contains_key(&variable_name) {
             panic!("Cannot redeclare variable `{}`", variable_name);
         }
 
-        self.variables.insert(variable_name, value);
+        self.variables
+            .insert(variable_name, Variable { value, is_const });
     }
 
     pub fn assign_variable(&mut self, variable_name: impl Into<String>, value: Value) {
@@ -38,15 +50,19 @@ impl Environment {
             panic!("Variable `{}` not found", variable_name);
         };
 
+        if variable.is_const {
+            panic!("Cannot assign to constant variable `{}`", variable_name);
+        }
+
         // Check if variables are of the same type
-        if std::mem::discriminant(variable) != std::mem::discriminant(&value) {
+        if std::mem::discriminant(&variable.value) != std::mem::discriminant(&value) {
             panic!("Trying to assign a different type to `{}`", variable_name);
         }
 
-        *variable = value;
+        variable.value = value;
     }
 
-    pub fn get_variable(&self, variable_name: impl Into<String>) -> &Value {
+    pub fn get_variable(&self, variable_name: impl Into<String>) -> &Variable {
         let variable_name = variable_name.into();
 
         // Try to get the variable from this environment

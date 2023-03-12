@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{bail, Context};
 
-use crate::core::lexer::Literal;
+use super::tokens::Literal;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {

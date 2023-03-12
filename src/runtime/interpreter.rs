@@ -1,10 +1,6 @@
 use crate::{
-    common::Value,
-    core::{
-        ast::*,
-        lexer::{Lexer, Operator},
-        parser::Parser,
-    },
+    common::{tokens::Operator, Value},
+    core::{ast::*, lexer::Lexer, parser::Parser},
 };
 
 use super::Environment;
@@ -35,9 +31,14 @@ impl Interpreter {
     fn evaluate_statement(&mut self, statement: Statement) -> Value {
         match statement {
             Statement::Expression(expression) => self.evaluate_expression(expression),
-            Statement::VariableDeclaration(identifier, expression) => {
-                let value = self.evaluate_expression(*expression);
-                self.environment.declare_variable(identifier, value.clone());
+            Statement::VariableDeclaration {
+                is_const,
+                name,
+                value_expression,
+            } => {
+                let value = self.evaluate_expression(*value_expression);
+                self.environment
+                    .declare_variable(name, value.clone(), is_const);
 
                 value
             }
@@ -60,7 +61,10 @@ impl Interpreter {
                     panic!("Functions not yet implemented");
                 }
 
-                self.environment.get_variable(&identifier.name).clone()
+                self.environment
+                    .get_variable(&identifier.name)
+                    .value
+                    .clone()
             }
             _ => todo!(),
         }

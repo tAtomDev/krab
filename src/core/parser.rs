@@ -1,9 +1,7 @@
 use crate::{
     ast::{Expression, Identifier, IdentifierKind, Statement},
-    lexer::{Punctuation, Token},
+    common::tokens::*,
 };
-
-use super::lexer::{Associativity, Keyword, Operator};
 
 pub struct Parser {
     position: usize,
@@ -100,20 +98,27 @@ impl Parser {
         };
 
         match keyword {
-            Keyword::Let => {
-                let Token::Identifier(identifier) = self.advance_token() else {
-                    panic!("Expected identifier after `let` keyword");
-                };
-
-                self.expect_token(Token::Operator(Operator::Assignment));
-
-                let expression = self.parse_expression();
-
-                self.expect_semicolon();
-
-                Statement::VariableDeclaration(identifier, Box::new(expression))
-            }
+            Keyword::Let => self.declare_variable(false),
+            Keyword::Const => self.declare_variable(true),
             _ => panic!("Keyword {:?} not yet implemented", keyword),
+        }
+    }
+
+    fn declare_variable(&mut self, is_const: bool) -> Statement {
+        let Token::Identifier(identifier) = self.advance_token() else {
+            panic!("Expected identifier after `let` keyword");
+        };
+
+        self.expect_token(Token::Operator(Operator::Assignment));
+
+        let expression = self.parse_expression();
+
+        self.expect_semicolon();
+
+        Statement::VariableDeclaration {
+            is_const,
+            name: identifier,
+            value_expression: Box::new(expression),
         }
     }
 

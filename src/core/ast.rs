@@ -1,4 +1,4 @@
-use crate::lexer::{Literal, Operator};
+use crate::common::tokens::{Literal, Operator};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Node {
@@ -10,7 +10,11 @@ pub type Body = Vec<Statement>;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Statement {
-    VariableDeclaration(String, Box<Expression>),
+    VariableDeclaration {
+        name: String,
+        value_expression: Box<Expression>,
+        is_const: bool,
+    },
     Assignment(String, Box<Expression>),
     Expression(Expression),
     Return(Expression),

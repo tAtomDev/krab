@@ -1,114 +1,7 @@
-use crate::util;
-
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Token {
-    Keyword(Keyword),
-    Literal(Literal),
-    Identifier(String),
-    Operator(Operator),
-    Punctuation(Punctuation),
-    Eof,
-    Invalid,
-}
-
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Literal {
-    Integer(i32),
-    Float(f32),
-    String(String),
-    Boolean(bool),
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
-pub enum Keyword {
-    Let,
-    If,
-    Else,
-    While,
-    Function,
-    Return,
-    Break,
-    Continue,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
-pub enum Operator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Modulo,
-    Power,
-    And,
-    Or,
-    Not,
-    Assignment,
-    Equal,
-    NotEqual,
-    Less,
-    Greater,
-    LessOrEqual,
-    GreaterOrEqual,
-    Arrow,
-}
-
-impl Operator {
-    pub const fn is_binary(self) -> bool {
-        matches!(
-            self,
-            Operator::Add
-                | Operator::Subtract
-                | Operator::Multiply
-                | Operator::Divide
-                | Operator::Modulo
-        )
-    }
-
-    pub const fn precedence(self) -> u8 {
-        match self {
-            Operator::Add | Operator::Subtract => 1,
-            Operator::Multiply | Operator::Divide | Operator::Modulo => 2,
-            Operator::Equal | Operator::NotEqual => 3,
-            Operator::Less
-            | Operator::LessOrEqual
-            | Operator::Greater
-            | Operator::GreaterOrEqual => 4,
-            _ => 5,
-        }
-    }
-
-    pub const fn associativity(&self) -> Associativity {
-        if self.is_binary() {
-            Associativity::Left
-        } else {
-            Associativity::None
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
-pub enum Associativity {
-    Left,
-    None,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
-pub enum Punctuation {
-    OpenParenthesis,  // (
-    CloseParenthesis, // )
-    OpenBrace,        // {
-    CloseBrace,       // }
-    OpenBrackets,     // [
-    CloseBrackets,    // ]
-    Semicolon,        //;
-    Comma,            //,
-    Colon,            //:
-    Dot,              //.
-    QuestionMark,     //?
-}
+use crate::{common::tokens::*, util};
 
 pub struct Lexer {
-    source: String,
+    source: Vec<char>,
     position: usize,
     waiting_for_identifier: bool,
 }
@@ -116,7 +9,7 @@ pub struct Lexer {
 impl Lexer {
     pub fn new(code: impl Into<String>) -> Self {
         Self {
-            source: code.into(),
+            source: code.into().chars().collect(),
             position: 0,
             waiting_for_identifier: false,
         }
@@ -140,14 +33,14 @@ impl Lexer {
 
     fn advance_char(&mut self) -> char {
         self.position += 1;
-        self.source.chars().nth(self.position - 1).unwrap()
+        *self.source.get(self.position - 1).unwrap()
     }
 
     fn current_char(&self) -> char {
         if self.is_at_end() {
             '\0'
         } else {
-            self.source.chars().nth(self.position).unwrap()
+            *self.source.get(self.position).unwrap()
         }
     }
 
@@ -305,6 +198,7 @@ impl Lexer {
 
         match string.as_str() {
             "let" => Token::Keyword(Keyword::Let),
+            "const" => Token::Keyword(Keyword::Const),
             "if" => Token::Keyword(Keyword::If),
             "else" => Token::Keyword(Keyword::Else),
             "while" => Token::Keyword(Keyword::While),
