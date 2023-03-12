@@ -56,6 +56,14 @@ impl Interpreter {
         match expression {
             Expression::Literal(literal) => literal.into(),
             Expression::Binary(..) => self.evaluate_binary_expression(expression),
+            Expression::Unary(op, expression) => {
+                let evaluated = self.evaluate_expression(*expression);
+                if op == Operator::Subtract {
+                    (-evaluated).unwrap()
+                } else {
+                    evaluated
+                }
+            }
             Expression::Identifier(identifier) => {
                 if identifier.kind == IdentifierKind::Function {
                     panic!("Functions not yet implemented");

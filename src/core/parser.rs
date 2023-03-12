@@ -193,6 +193,18 @@ impl Parser {
 
                 expr
             }
+            Token::Operator(op) => {
+                if !op.is_unary() {
+                    panic!("Trying to parse unexpected operator: {:?}", op);
+                }
+
+                let expression = self.parse_primary();
+                if let Expression::Unary(_, invalid) = &expression {
+                    panic!("Invalid unary expression: {:?}", invalid);
+                }
+
+                Expression::Unary(op, Box::new(expression))
+            }
             _ => panic!("Trying to parse unexpected token: {:?}", token),
         }
     }
@@ -207,7 +219,7 @@ mod tests {
     fn basic_variable() {
         let code = r#"
             let x = 1 + 1;
-            x = 5;
+            x = 5 + -1;
         "#;
 
         let program = Parser::new(Lexer::new(code).lex()).parse();
@@ -225,7 +237,14 @@ mod tests {
                 },
                 Statement::Assignment(
                     "x".into(),
-                    Box::new(Expression::Literal(Literal::Integer(5)))
+                    Box::new(Expression::Binary(
+                        Box::new(Expression::Literal(Literal::Integer(5))),
+                        Operator::Add,
+                        Box::new(Expression::Unary(
+                            Operator::Subtract,
+                            Box::new(Expression::Literal(Literal::Integer(1)))
+                        ))
+                    ))
                 )
             ]
         )

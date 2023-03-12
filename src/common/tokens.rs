@@ -65,6 +65,10 @@ impl Operator {
         )
     }
 
+    pub const fn is_unary(self) -> bool {
+        matches!(self, Operator::Add | Operator::Subtract)
+    }
+
     pub const fn precedence(self) -> u8 {
         match self {
             Operator::Add | Operator::Subtract => 1,

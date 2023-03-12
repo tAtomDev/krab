@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    ops::{Add, Div, Mul, Rem, Sub},
+    ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
 use anyhow::{bail, Context};
@@ -65,6 +65,18 @@ impl Value {
         match self {
             Value::String(s) => Some(s.as_str()),
             _ => None,
+        }
+    }
+}
+
+impl Neg for Value {
+    type Output = anyhow::Result<Value>;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Self::Integer(v) => Ok(Self::Integer(-v)),
+            Self::Float(v) => Ok(Self::Float(-v)),
+            _ => bail!("Cannot negate type: {}", self),
         }
     }
 }
