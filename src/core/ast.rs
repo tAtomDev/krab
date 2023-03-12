@@ -1,10 +1,16 @@
 use crate::common::tokens::{Literal, Operator};
 
-pub type Body = Vec<Statement>;
+pub type Body = Vec<Node>;
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum Node {
+    Empty,
+    Statement(Statement),
+    Expression(Expression),
+}
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Statement {
-    Empty,
     VariableDeclaration {
         name: String,
         value_expression: Box<Expression>,

@@ -55,11 +55,18 @@ impl Interpreter {
         self.evaluate(program)
     }
 
-    pub fn evaluate(&mut self, program: Vec<Statement>) -> Result<Value, RuntimeError> {
+    pub fn evaluate(&mut self, program: Body) -> Result<Value, RuntimeError> {
         let mut last_value = Value::Nothing;
 
-        for statement in program {
-            last_value = self.evaluate_statement(statement)?;
+        for node in program {
+            last_value = match node {
+                Node::Statement(statement) => {
+                    self.evaluate_statement(statement)?;
+                    Value::Nothing
+                }
+                Node::Expression(expression) => self.evaluate_expression(expression)?,
+                Node::Empty => Value::Nothing,
+            };
         }
 
         Ok(last_value)
@@ -67,7 +74,6 @@ impl Interpreter {
 
     fn evaluate_statement(&mut self, statement: Statement) -> Result<Value, RuntimeError> {
         let value = match statement {
-            Statement::Empty => Value::Nothing,
             Statement::Expression(expression) => self.evaluate_expression(expression)?,
             Statement::VariableDeclaration {
                 is_const,
@@ -128,16 +134,14 @@ impl Interpreter {
         let lhs = self.evaluate_expression(*lhs)?;
         let rhs = self.evaluate_expression(*rhs)?;
 
-        let value = match op {
+        match op {
             Operator::Add => (lhs + rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Subtract => (lhs - rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Multiply => (lhs * rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Divide => (lhs / rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Modulo => (lhs % rhs).map_err(|_| RuntimeError::InvalidType),
             _ => panic!("Invalid operator provided"),
-        };
-
-        value
+        }
     }
 }
 

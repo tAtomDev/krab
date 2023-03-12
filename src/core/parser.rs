@@ -5,6 +5,8 @@ use crate::{
 
 use thiserror::Error;
 
+use super::ast::{Body, Node};
+
 #[derive(Error, Debug)]
 pub enum ParserError {
     #[error("expected semicolon ';'")]
@@ -40,13 +42,13 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Statement>, ParserError> {
+    pub fn parse(&mut self) -> Result<Body, ParserError> {
         let mut program = Vec::new();
 
         while !self.is_at_end() {
-            let statement = self.parse_statement()?;
-            if statement != Statement::Empty {
-                program.push(statement);
+            let node = self.parse_node()?;
+            if node != Node::Empty {
+                program.push(node);
             }
         }
 
@@ -83,22 +85,38 @@ impl Parser {
         self.tokens.get(self.position - 1).unwrap().clone()
     }
 
+    fn parse_node(&mut self) -> Result<Node, ParserError> {
+        match self.current_token() {
+            Token::Punctuation(Punctuation::Semicolon) => {
+                self.advance_token();
+                Ok(Node::Empty)
+            }
+            _ => {
+                let stmt = self.parse_statement()?;
+                if let Statement::Expression(expr) = stmt {
+                    if self.current_token() == &SEMICOLON_TOKEN {
+                        self.advance_token();
+                        return Ok(Node::Statement(Statement::Expression(expr)));
+                    }
+
+                    Ok(Node::Expression(expr))
+                } else {
+                    Ok(Node::Statement(stmt))
+                }
+            }
+        }
+    }
+
     fn parse_statement(&mut self) -> Result<Statement, ParserError> {
         match self.current_token() {
             Token::Identifier(_) => self.parse_identifier(),
             Token::Literal(_) => Ok(Statement::Expression(self.parse_expression()?)),
             Token::Keyword(_) => self.parse_keyword(),
-            Token::Punctuation(Punctuation::Semicolon) => {
-                self.advance_token();
-                Ok(Statement::Empty)
-            }
             Token::Invalid => Err(ParserError::InvalidToken(self.current_token().clone())),
             Token::Eof => unreachable!(),
             _ => {
                 let expr = self.parse_expression()?;
-                if self.current_token() == &SEMICOLON_TOKEN {
-                    self.advance_token();
-                }
+
                 Ok(Statement::Expression(expr))
             }
         }
@@ -137,6 +155,12 @@ impl Parser {
         match keyword {
             Keyword::Let => self.parse_variable_declaration(false),
             Keyword::Const => self.parse_variable_declaration(true),
+            Keyword::Return => {
+                let expression = self.parse_expression()?;
+                self.expect_semicolon()?;
+
+                Ok(Statement::Return(expression))
+            }
             _ => panic!("Keyword {:?} not implemented yer", keyword),
         }
     }
@@ -168,13 +192,16 @@ impl Parser {
 
     fn parse_binary(&mut self, min_precedence: u8) -> Result<Expression, ParserError> {
         let mut lhs = self.parse_primary()?;
+
         loop {
             let operator_token = self.current_token().clone();
+            if operator_token == SEMICOLON_TOKEN {
+                break;
+            }
+
             let operator = match operator_token {
                 Token::Operator(operator) => operator,
-                Token::Eof
-                | Token::Punctuation(Punctuation::CloseParenthesis)
-                | Token::Punctuation(Punctuation::Semicolon) => break,
+                Token::Eof | Token::Punctuation(Punctuation::CloseParenthesis) => break,
                 _ => return Err(ParserError::ExpectedOperatorButFound(operator_token)),
             };
 
@@ -210,6 +237,7 @@ impl Parser {
                 if self.advance_token() != Token::Punctuation(Punctuation::CloseParenthesis) {
                     return Err(ParserError::MissingClosingParenthesis);
                 }
+
                 expr
             }
             Token::Operator(operator) => {
@@ -226,6 +254,7 @@ impl Parser {
             }
             _ => return Err(ParserError::TryingToParseUnexpectedToken(token)),
         };
+
         Ok(expression)
     }
 }
@@ -248,7 +277,7 @@ mod tests {
         assert_eq!(
             program,
             vec![
-                Statement::VariableDeclaration {
+                Node::Statement(Statement::VariableDeclaration {
                     name: "x".into(),
                     value_expression: Box::new(Expression::Binary(
                         Box::new(Expression::Literal(Literal::Integer(1))),
@@ -256,8 +285,8 @@ mod tests {
                         Box::new(Expression::Literal(Literal::Integer(1)))
                     )),
                     is_const: false
-                },
-                Statement::Assignment(
+                }),
+                Node::Statement(Statement::Assignment(
                     "x".into(),
                     Box::new(Expression::Binary(
                         Box::new(Expression::Literal(Literal::Integer(5))),
@@ -267,47 +296,54 @@ mod tests {
                             Box::new(Expression::Literal(Literal::Integer(1)))
                         ))
                     ))
-                )
+                ))
             ]
         )
     }
 
     #[test]
     fn complex_math_expression() {
-        let code = "let x = x * ((2 + 3 * 4) / (5 - 1));";
+        let code = "let x = x * ((2 + 3 * 4) / (5 - 1));\nx";
         let program = Parser::new(Lexer::new(code).lex().unwrap())
             .parse()
             .unwrap();
+
         assert_eq!(
             program,
-            vec![Statement::VariableDeclaration {
-                name: "x".into(),
-                value_expression: Box::new(Expression::Binary(
-                    Box::new(Expression::Identifier(Identifier {
-                        kind: IdentifierKind::Variable,
-                        name: "x".into()
-                    })),
-                    Operator::Multiply,
-                    Box::new(Expression::Binary(
+            vec![
+                Node::Statement(Statement::VariableDeclaration {
+                    name: "x".into(),
+                    value_expression: Box::new(Expression::Binary(
+                        Box::new(Expression::Identifier(Identifier {
+                            kind: IdentifierKind::Variable,
+                            name: "x".into()
+                        })),
+                        Operator::Multiply,
                         Box::new(Expression::Binary(
-                            Box::new(Expression::Literal(Literal::Integer(2))),
-                            Operator::Add,
                             Box::new(Expression::Binary(
-                                Box::new(Expression::Literal(Literal::Integer(3))),
-                                Operator::Multiply,
-                                Box::new(Expression::Literal(Literal::Integer(4)))
+                                Box::new(Expression::Literal(Literal::Integer(2))),
+                                Operator::Add,
+                                Box::new(Expression::Binary(
+                                    Box::new(Expression::Literal(Literal::Integer(3))),
+                                    Operator::Multiply,
+                                    Box::new(Expression::Literal(Literal::Integer(4)))
+                                )),
                             )),
-                        )),
-                        Operator::Divide,
-                        Box::new(Expression::Binary(
-                            Box::new(Expression::Literal(Literal::Integer(5))),
-                            Operator::Subtract,
-                            Box::new(Expression::Literal(Literal::Integer(1)))
-                        )),
-                    ))
-                )),
-                is_const: false,
-            }]
+                            Operator::Divide,
+                            Box::new(Expression::Binary(
+                                Box::new(Expression::Literal(Literal::Integer(5))),
+                                Operator::Subtract,
+                                Box::new(Expression::Literal(Literal::Integer(1)))
+                            )),
+                        ))
+                    )),
+                    is_const: false,
+                }),
+                Node::Expression(Expression::Identifier(Identifier {
+                    kind: IdentifierKind::Variable,
+                    name: "x".into()
+                }))
+            ]
         );
     }
 }
