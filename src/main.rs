@@ -3,7 +3,10 @@ mod core;
 mod runtime;
 mod util;
 
-use std::{io::{self, BufRead, Write, BufReader, Read}, fs::File};
+use std::{
+    fs::File,
+    io::{self, BufRead, BufReader, Read, Write},
+};
 
 use crate::{common::Value, core::*, runtime::Interpreter};
 

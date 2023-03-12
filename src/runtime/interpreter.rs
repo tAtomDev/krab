@@ -99,7 +99,10 @@ impl Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::{BufReader, Read}};
+    use std::{
+        fs::File,
+        io::{BufReader, Read},
+    };
 
     use super::*;
 
@@ -116,7 +119,8 @@ mod tests {
 
     #[test]
     fn basic_math() {
-        let (mut interpreter, content) = _create_interpreter_and_read_file("./examples/basic_math.krab");
+        let (mut interpreter, content) =
+            _create_interpreter_and_read_file("./examples/basic_math.krab");
         let evaluated = interpreter.evaluate(&content);
 
         assert_eq!(evaluated, Value::Integer(1))
