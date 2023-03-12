@@ -3,7 +3,7 @@ mod core;
 mod runtime;
 mod util;
 
-use std::io::{self, BufRead, Write};
+use std::{io::{self, BufRead, Write, BufReader, Read}, fs::File};
 
 use crate::{common::Value, core::*, runtime::Interpreter};
 
@@ -73,6 +73,19 @@ fn main() {
 
             println!("\x1b[36m{}\x1b[0m", variables.trim());
             continue;
+        }
+
+        if buffer.ends_with(".krab") {
+            let Ok(file) = File::open(&buffer) else {
+                println!("File not found");
+                continue;
+            };
+
+            let mut buf_reader = BufReader::new(file);
+            let mut content = String::with_capacity(1024);
+
+            buf_reader.read_to_string(&mut content).unwrap();
+            buffer = content;
         }
 
         let value = interpreter.evaluate(&buffer);
