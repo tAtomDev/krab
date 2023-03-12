@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Token {
     Keyword(Keyword),
@@ -7,6 +9,12 @@ pub enum Token {
     Punctuation(Punctuation),
     Eof,
     Invalid,
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

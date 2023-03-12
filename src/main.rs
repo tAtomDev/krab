@@ -25,7 +25,7 @@ fn main() {
     let mut stdin = io::stdin().lock();
     loop {
         buffer.clear();
-        print!("> \x1b[33m");
+        print!("\x1b[0m> \x1b[33m");
         io::stdout().flush().unwrap();
 
         stdin.read_line(&mut buffer).unwrap();
@@ -52,7 +52,7 @@ fn main() {
 
         if buffer.starts_with("/parse") {
             buffer = buffer.split_off(6);
-            let program = Parser::new(Lexer::new(&buffer).lex()).parse();
+            let program = Parser::new(Lexer::new(&buffer).lex().unwrap()).parse();
             println!("{program:?}");
             continue;
         }
@@ -91,7 +91,13 @@ fn main() {
             buffer = content;
         }
 
-        let value = interpreter.evaluate(&buffer);
+        let value = match interpreter.evaluate_source(&buffer) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("\x1b[31m{}", e);
+                continue;
+            }
+        };
 
         if value != Value::Nothing {
             println!("{}", value);

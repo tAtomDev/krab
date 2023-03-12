@@ -1,9 +1,32 @@
+use std::fmt::Display;
+
 use crate::{
     common::{tokens::Operator, Value},
-    core::{ast::*, lexer::Lexer, parser::Parser},
+    core::{
+        ast::*,
+        lexer::{Lexer, LexicalError},
+        parser::{Parser, ParserError},
+    },
 };
 
 use super::Environment;
+
+use thiserror::Error;
+
+#[derive(Debug)]
+pub enum RuntimeError {
+    LexicalError(LexicalError),
+    ParserError(ParserError),
+}
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LexicalError(e) => write!(f, "Lexical Error: {}", e),
+            Self::ParserError(e) => write!(f, "Parser Error: {}", e),
+        }
+    }
+}
 
 pub struct Interpreter {
     pub environment: Environment,
@@ -16,15 +39,28 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate(&mut self, src: &str) -> Value {
-        let lex = Lexer::new(src).lex();
-        let program = Parser::new(lex).parse();
+    pub fn evaluate_source(&mut self, src: &str) -> Result<Value, RuntimeError> {
+        let lex = match Lexer::new(src).lex() {
+            Ok(lex) => lex,
+            Err(e) => return Err(RuntimeError::LexicalError(e)),
+        };
 
-        program
+        let program = match Parser::new(lex).parse() {
+            Ok(program) => program,
+            Err(e) => return Err(RuntimeError::ParserError(e)),
+        };
+
+        self.evaluate(program)
+    }
+
+    pub fn evaluate(&mut self, program: Vec<Statement>) -> Result<Value, RuntimeError> {
+        let value = program
             .into_iter()
             .map(|statement| self.evaluate_statement(statement))
             .last()
-            .unwrap_or(Value::Nothing)
+            .unwrap_or(Value::Nothing);
+
+        Ok(value)
     }
 
     fn evaluate_statement(&mut self, statement: Statement) -> Value {
@@ -66,7 +102,7 @@ impl Interpreter {
             }
             Expression::Identifier(identifier) => {
                 if identifier.kind == IdentifierKind::Function {
-                    panic!("Functions not yet implemented");
+                    panic!("Functions are not yet implemented");
                 }
 
                 self.environment
@@ -80,7 +116,7 @@ impl Interpreter {
 
     fn evaluate_binary_expression(&self, expression: Expression) -> Value {
         let Expression::Binary(lhs, op, rhs) = expression else {
-            panic!("Expected binary expression");
+            unreachable!()
         };
 
         let lhs = self.evaluate_expression(*lhs);
@@ -121,7 +157,7 @@ mod tests {
     fn basic_math() {
         let (mut interpreter, content) =
             _create_interpreter_and_read_file("./examples/basic_math.krab");
-        let evaluated = interpreter.evaluate(&content);
+        let evaluated = interpreter.evaluate_source(&content).unwrap();
 
         assert_eq!(evaluated, Value::Integer(1))
     }

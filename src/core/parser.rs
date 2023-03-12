@@ -3,6 +3,30 @@ use crate::{
     common::tokens::*,
 };
 
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ParserError {
+    #[error("expected semicolon ';'")]
+    ExpectedSemicolon,
+    #[error("invalid token '{0}'")]
+    InvalidToken(Token),
+    #[error("expected a valid identifier")]
+    ExpectedValidIdentifier,
+    #[error("you must assign a value to the '{0}' variable")]
+    MustAssignToVariable(String),
+    #[error("expected operator but found '{0}'")]
+    ExpectedOperatorButFound(Token),
+    #[error("missing ')' at the end of the expression")]
+    MissingClosingParenthesis,
+    #[error("trying to parse unexpected operator: {0:?}")]
+    TryingToParseUnexpectedOperator(Operator),
+    #[error("trying to parse unexpected token: {0}")]
+    TryingToParseUnexpectedToken(Token),
+    #[error("invalid unary expression")]
+    InvalidUnaryExpression,
+}
+
 pub struct Parser {
     position: usize,
     tokens: Vec<Token>,
@@ -16,17 +40,17 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Vec<Statement> {
+    pub fn parse(&mut self) -> Result<Vec<Statement>, ParserError> {
         let mut program = Vec::new();
 
         while !self.is_at_end() {
-            let statement = self.parse_statement();
+            let statement = self.parse_statement()?;
             if statement != Statement::Empty {
                 program.push(statement);
             }
         }
 
-        program
+        Ok(program)
     }
 
     pub fn current_token(&self) -> &Token {
@@ -42,20 +66,12 @@ impl Parser {
         *token == Token::Eof
     }
 
-    fn expect_token(&mut self, token: Token) {
-        if self.advance_token() != token {
-            panic!(
-                "Expected token: {:?}, but found {:?}",
-                token,
-                self.current_token()
-            )
-        }
-    }
-
-    fn expect_semicolon(&mut self) {
+    fn expect_semicolon(&mut self) -> Result<(), ParserError> {
         if self.advance_token() != Token::Punctuation(Punctuation::Semicolon) {
-            panic!("Expected semicolon ';'");
+            return Err(ParserError::ExpectedSemicolon);
         }
+
+        Ok(())
     }
 
     fn return_positions(&mut self, positions: usize) {
@@ -67,86 +83,96 @@ impl Parser {
         self.tokens.get(self.position - 1).unwrap().clone()
     }
 
-    fn parse_statement(&mut self) -> Statement {
+    fn parse_statement(&mut self) -> Result<Statement, ParserError> {
         let token = self.current_token();
-        match *token {
-            Token::Identifier(_) => self.parse_identifier(),
-            Token::Literal(_) => Statement::Expression(self.parse_expression()),
-            Token::Keyword(_) => self.parse_keyword(),
+        let statement = match *token {
+            Token::Identifier(_) => self.parse_identifier()?,
+            Token::Literal(_) => Statement::Expression(self.parse_expression()?),
+            Token::Keyword(_) => self.parse_keyword()?,
             Token::Punctuation(Punctuation::Semicolon) => {
                 self.advance_token();
                 Statement::Empty
             }
-            Token::Invalid => panic!("Invalid token: {:?}", token),
+
+            Token::Invalid => return Err(ParserError::InvalidToken(token.clone())),
+
             Token::Eof => unreachable!(),
             _ => {
-                let expr = self.parse_expression();
+                let expr = self.parse_expression()?;
                 if self.current_token() == &SEMICOLON_TOKEN {
                     self.advance_token();
                 }
 
                 Statement::Expression(expr)
             }
-        }
-    }
-
-    fn parse_identifier(&mut self) -> Statement {
-        let Token::Identifier(identifier) = self.advance_token() else {
-            panic!("Expected identifier at parse_identifier");
         };
 
-        match self.current_token() {
+        Ok(statement)
+    }
+
+    fn parse_identifier(&mut self) -> Result<Statement, ParserError> {
+        let Token::Identifier(identifier) = self.advance_token() else {
+            unreachable!()
+        };
+
+        let statement = match self.current_token() {
             Token::Operator(Operator::Assignment) => {
                 self.advance_token();
-                let expression = self.parse_expression();
+                let expression = self.parse_expression()?;
 
-                self.expect_semicolon();
+                self.expect_semicolon()?;
 
                 Statement::Assignment(identifier, Box::new(expression))
             }
             _ => {
                 self.return_positions(1);
-                Statement::Expression(self.parse_expression())
+                Statement::Expression(self.parse_expression()?)
             }
-        }
+        };
+
+        Ok(statement)
     }
 
-    fn parse_keyword(&mut self) -> Statement {
+    fn parse_keyword(&mut self) -> Result<Statement, ParserError> {
         let Token::Keyword(keyword) = self.advance_token() else {
-            panic!("Expected keyword at parse_keyword");
+            unreachable!()
         };
 
-        match keyword {
-            Keyword::Let => self.declare_variable(false),
-            Keyword::Const => self.declare_variable(true),
+        let statement = match keyword {
+            Keyword::Let => self.declare_variable(false)?,
+            Keyword::Const => self.declare_variable(true)?,
             _ => panic!("Keyword {:?} not yet implemented", keyword),
-        }
+        };
+
+        Ok(statement)
     }
 
-    fn declare_variable(&mut self, is_const: bool) -> Statement {
+    fn declare_variable(&mut self, is_const: bool) -> Result<Statement, ParserError> {
         let Token::Identifier(identifier) = self.advance_token() else {
-            panic!("Expected a valid identifier");
+            return Err(ParserError::ExpectedValidIdentifier);
         };
 
-        self.expect_token(Token::Operator(Operator::Assignment));
+        if self.advance_token() != Token::Operator(Operator::Assignment) {
+            return Err(ParserError::MustAssignToVariable(identifier));
+        }
 
-        let expression = self.parse_expression();
+        let expression = self.parse_expression()?;
 
-        self.expect_semicolon();
+        self.expect_semicolon()?;
 
-        Statement::VariableDeclaration {
+        Ok(Statement::VariableDeclaration {
             is_const,
             name: identifier,
             value_expression: Box::new(expression),
-        }
+        })
     }
 
-    fn parse_expression(&mut self) -> Expression {
+    fn parse_expression(&mut self) -> Result<Expression, ParserError> {
         self.parse_binary(0)
     }
 
-    fn parse_binary(&mut self, min_precedence: u8) -> Expression {
-        let mut lhs = self.parse_primary();
+    fn parse_binary(&mut self, min_precedence: u8) -> Result<Expression, ParserError> {
+        let mut lhs = self.parse_primary()?;
         loop {
             let operator = self.current_token().clone();
             let Token::Operator(operator) = operator else {
@@ -154,7 +180,7 @@ impl Parser {
                     break;
                 }
 
-                panic!("Expected operator, found '{:?}'", operator);
+                return Err(ParserError::ExpectedOperatorButFound(operator));
             };
 
             let operator_precedence = operator.precedence();
@@ -164,49 +190,51 @@ impl Parser {
 
             self.advance_token();
             let rhs = if operator.associativity() == Associativity::Left {
-                self.parse_binary(operator_precedence + 1)
+                self.parse_binary(operator_precedence + 1)?
             } else {
-                self.parse_binary(operator_precedence)
+                self.parse_binary(operator_precedence)?
             };
 
             lhs = Expression::Binary(Box::new(lhs), operator, Box::new(rhs));
         }
 
-        lhs
+        Ok(lhs)
     }
 
-    fn parse_primary(&mut self) -> Expression {
+    fn parse_primary(&mut self) -> Result<Expression, ParserError> {
         let token = self.advance_token();
 
-        match token {
+        let expression = match token {
             Token::Identifier(name) => Expression::Identifier(Identifier {
                 kind: IdentifierKind::Variable,
                 name,
             }),
             Token::Literal(literal) => Expression::Literal(literal),
             Token::Punctuation(Punctuation::OpenParenthesis) => {
-                let expr = self.parse_expression();
+                let expr = self.parse_expression()?;
 
                 if self.advance_token() != Token::Punctuation(Punctuation::CloseParenthesis) {
-                    panic!("Missing ')' at the end of the expression");
+                    return Err(ParserError::MissingClosingParenthesis);
                 }
 
                 expr
             }
             Token::Operator(op) => {
                 if !op.is_unary() {
-                    panic!("Trying to parse unexpected operator: {:?}", op);
+                    return Err(ParserError::TryingToParseUnexpectedOperator(op));
                 }
 
-                let expression = self.parse_primary();
-                if let Expression::Unary(_, invalid) = &expression {
-                    panic!("Invalid unary expression: {:?}", invalid);
+                let expression = self.parse_primary()?;
+                if let Expression::Unary(_, _) = &expression {
+                    return Err(ParserError::InvalidUnaryExpression);
                 }
 
                 Expression::Unary(op, Box::new(expression))
             }
-            _ => panic!("Trying to parse unexpected token: {:?}", token),
-        }
+            _ => return Err(ParserError::TryingToParseUnexpectedToken(token)),
+        };
+
+        Ok(expression)
     }
 }
 
@@ -222,7 +250,9 @@ mod tests {
             x = 5 + -1;
         "#;
 
-        let program = Parser::new(Lexer::new(code).lex()).parse();
+        let program = Parser::new(Lexer::new(code).lex().unwrap())
+            .parse()
+            .unwrap();
         assert_eq!(
             program,
             vec![
@@ -253,7 +283,9 @@ mod tests {
     #[test]
     fn complex_math_expression() {
         let code = "let x = x * ((2 + 3 * 4) / (5 - 1));";
-        let program = Parser::new(Lexer::new(code).lex()).parse();
+        let program = Parser::new(Lexer::new(code).lex().unwrap())
+            .parse()
+            .unwrap();
         assert_eq!(
             program,
             vec![Statement::VariableDeclaration {

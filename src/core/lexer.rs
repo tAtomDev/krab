@@ -1,4 +1,17 @@
 use crate::{common::tokens::*, util};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum LexicalError {
+    #[error("missing '{0}' at end of string literal at {1}")]
+    MissingAtEndOfStringLiteral(char, usize),
+    #[error("invalid floating point literal at {0}")]
+    InvalidFloatLiteral(usize),
+    #[error("invalid or unexpected identifier character '{0}' at {1}")]
+    InvalidIdentifierCharacter(char, usize),
+    #[error("invalid identifier at {0}")]
+    InvalidIdentifier(usize),
+}
 
 pub struct Lexer {
     source: Vec<char>,
@@ -15,11 +28,12 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self) -> Vec<Token> {
+    pub fn lex(&mut self) -> Result<Vec<Token>, LexicalError> {
         let mut tokens: Vec<Token> = Vec::new();
 
         while !self.is_at_end() {
-            let token = self.scan_token();
+            let token = self.scan_token()?;
+
             if token == Token::Invalid {
                 continue;
             }
@@ -28,7 +42,7 @@ impl Lexer {
         }
 
         tokens.push(Token::Eof);
-        tokens
+        Ok(tokens)
     }
 
     fn advance_char(&mut self) -> char {
@@ -57,7 +71,7 @@ impl Lexer {
         self.position >= self.source.len()
     }
 
-    fn scan_token(&mut self) -> Token {
+    fn scan_token(&mut self) -> Result<Token, LexicalError> {
         let c = self.advance_char();
 
         let token = match c {
@@ -118,9 +132,9 @@ impl Lexer {
             c if c == '&' && self.check_char_and_advance('&') => Token::Operator(Operator::And),
             c if c == '|' && self.check_char_and_advance('|') => Token::Operator(Operator::Or),
 
-            '"' | '\'' => self.string(c),
-            c if c.is_ascii_digit() => self.number(c),
-            c if c.is_alphabetic() || c == '_' => self.keyword_or_identifier(c),
+            '"' | '\'' => self.string(c)?,
+            c if c.is_ascii_digit() => self.number(c)?,
+            c if c.is_alphabetic() || c == '_' => self.keyword_or_identifier(c)?,
             _ => Token::Invalid,
         };
 
@@ -131,10 +145,10 @@ impl Lexer {
             }
         }
 
-        token
+        Ok(token)
     }
 
-    fn string(&mut self, quote: char) -> Token {
+    fn string(&mut self, quote: char) -> Result<Token, LexicalError> {
         let mut string = String::new();
         let mut failed = true;
 
@@ -149,13 +163,16 @@ impl Lexer {
         }
 
         if failed {
-            panic!("Missing {} at the end of string literal", quote);
+            return Err(LexicalError::MissingAtEndOfStringLiteral(
+                quote,
+                self.position,
+            ));
         }
 
-        Token::Literal(Literal::String(string))
+        Ok(Token::Literal(Literal::String(string)))
     }
 
-    fn number(&mut self, first_number: char) -> Token {
+    fn number(&mut self, first_number: char) -> Result<Token, LexicalError> {
         let mut string = String::new();
         let mut is_float = false;
 
@@ -164,7 +181,7 @@ impl Lexer {
         while !self.is_at_end() {
             if self.current_char() == '.' {
                 if is_float {
-                    panic!("Invalid floating point number formatting");
+                    return Err(LexicalError::InvalidFloatLiteral(self.position));
                 }
 
                 is_float = true;
@@ -176,13 +193,17 @@ impl Lexer {
         }
 
         if is_float {
-            Token::Literal(Literal::Float(string.parse::<f32>().unwrap()))
+            Ok(Token::Literal(Literal::Float(
+                string.parse::<f32>().unwrap(),
+            )))
         } else {
-            Token::Literal(Literal::Integer(string.parse::<i32>().unwrap()))
+            Ok(Token::Literal(Literal::Integer(
+                string.parse::<i32>().unwrap(),
+            )))
         }
     }
 
-    fn keyword_or_identifier(&mut self, char: char) -> Token {
+    fn keyword_or_identifier(&mut self, char: char) -> Result<Token, LexicalError> {
         let mut string = String::new();
 
         string.push(char);
@@ -196,7 +217,7 @@ impl Lexer {
             string.push(self.advance_char());
         }
 
-        match string.as_str() {
+        let token = match string.as_str() {
             "let" => Token::Keyword(Keyword::Let),
             "const" => Token::Keyword(Keyword::Const),
             "if" => Token::Keyword(Keyword::If),
@@ -210,11 +231,13 @@ impl Lexer {
             "true" => Token::Literal(Literal::Boolean(true)),
             "false" => Token::Literal(Literal::Boolean(false)),
 
-            _ => self.identifier(string),
-        }
+            _ => self.identifier(string)?,
+        };
+
+        Ok(token)
     }
 
-    fn identifier(&mut self, mut string: String) -> Token {
+    fn identifier(&mut self, mut string: String) -> Result<Token, LexicalError> {
         while !self.is_at_end() {
             let current_char = self.current_char();
 
@@ -226,17 +249,20 @@ impl Lexer {
                 && current_char != '_'
                 && !current_char.is_ascii_alphanumeric()
             {
-                panic!("Character '{current_char}' is not valid for identifiers");
+                return Err(LexicalError::InvalidIdentifierCharacter(
+                    current_char,
+                    self.position,
+                ));
             }
 
             string.push(self.advance_char());
         }
 
         if string.is_empty() {
-            panic!("Invalid identifier");
+            return Err(LexicalError::InvalidIdentifier(self.position));
         }
 
-        Token::Identifier(string)
+        Ok(Token::Identifier(string))
     }
 }
 
@@ -257,7 +283,7 @@ mod tests {
         }
         "#;
 
-        let lex = Lexer::new(code).lex();
+        let lex = Lexer::new(code).lex().unwrap();
 
         assert_eq!(
             lex,
@@ -290,7 +316,7 @@ mod tests {
             let b = ((a + 1) * 2 - 4) % 3;
         "#;
 
-        let lex = Lexer::new(code).lex();
+        let lex = Lexer::new(code).lex().unwrap();
 
         assert_eq!(
             lex,
@@ -337,7 +363,7 @@ mod tests {
             let b = !a || true;
         "#;
 
-        let lex = Lexer::new(code).lex();
+        let lex = Lexer::new(code).lex().unwrap();
 
         assert_eq!(
             lex,
@@ -370,7 +396,7 @@ mod tests {
             }
         "#;
 
-        let lex = Lexer::new(code).lex();
+        let lex = Lexer::new(code).lex().unwrap();
 
         assert_eq!(
             lex,
@@ -407,7 +433,7 @@ mod tests {
             let y: i32 = 123;
         "#;
 
-        let lex = Lexer::new(code).lex();
+        let lex = Lexer::new(code).lex().unwrap();
 
         assert_eq!(
             lex,
@@ -450,7 +476,7 @@ mod tests {
             }
         "#;
 
-        let lex = Lexer::new(code).lex();
+        let lex = Lexer::new(code).lex().unwrap();
 
         assert_eq!(
             lex,
