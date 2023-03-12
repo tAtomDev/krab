@@ -84,44 +84,38 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ParserError> {
-        let token = self.current_token();
-        let statement = match *token {
-            Token::Identifier(_) => self.parse_identifier()?,
-            Token::Literal(_) => Statement::Expression(self.parse_expression()?),
-            Token::Keyword(_) => self.parse_keyword()?,
+        match self.current_token() {
+            Token::Identifier(_) => self.parse_identifier(),
+            Token::Literal(_) => Ok(Statement::Expression(self.parse_expression()?)),
+            Token::Keyword(_) => self.parse_keyword(),
             Token::Punctuation(Punctuation::Semicolon) => {
                 self.advance_token();
-                Statement::Empty
+                Ok(Statement::Empty)
             }
-
-            Token::Invalid => return Err(ParserError::InvalidToken(token.clone())),
-
+            Token::Invalid => Err(ParserError::InvalidToken(self.current_token().clone())),
             Token::Eof => unreachable!(),
             _ => {
                 let expr = self.parse_expression()?;
                 if self.current_token() == &SEMICOLON_TOKEN {
                     self.advance_token();
                 }
-
-                Statement::Expression(expr)
+                Ok(Statement::Expression(expr))
             }
-        };
-
-        Ok(statement)
+        }
     }
 
     fn parse_identifier(&mut self) -> Result<Statement, ParserError> {
-        let Token::Identifier(identifier) = self.advance_token() else {
-            unreachable!()
+        let identifier_token = self.advance_token();
+        let identifier = match identifier_token {
+            Token::Identifier(identifier) => identifier,
+            _ => return Err(ParserError::ExpectedValidIdentifier),
         };
 
         let statement = match self.current_token() {
             Token::Operator(Operator::Assignment) => {
                 self.advance_token();
                 let expression = self.parse_expression()?;
-
                 self.expect_semicolon()?;
-
                 Statement::Assignment(identifier, Box::new(expression))
             }
             _ => {
@@ -134,36 +128,37 @@ impl Parser {
     }
 
     fn parse_keyword(&mut self) -> Result<Statement, ParserError> {
-        let Token::Keyword(keyword) = self.advance_token() else {
-            unreachable!()
+        let keyword_token = self.advance_token();
+        let keyword = match keyword_token {
+            Token::Keyword(keyword) => keyword,
+            _ => unreachable!(),
         };
 
-        let statement = match keyword {
-            Keyword::Let => self.declare_variable(false)?,
-            Keyword::Const => self.declare_variable(true)?,
-            _ => panic!("Keyword {:?} not yet implemented", keyword),
-        };
-
-        Ok(statement)
+        match keyword {
+            Keyword::Let => self.parse_variable_declaration(false),
+            Keyword::Const => self.parse_variable_declaration(true),
+            _ => panic!("Keyword {:?} not implemented yer", keyword),
+        }
     }
 
-    fn declare_variable(&mut self, is_const: bool) -> Result<Statement, ParserError> {
-        let Token::Identifier(identifier) = self.advance_token() else {
-            return Err(ParserError::ExpectedValidIdentifier);
+    fn parse_variable_declaration(&mut self, is_const: bool) -> Result<Statement, ParserError> {
+        let identifier_token = self.advance_token();
+        let identifier = match identifier_token {
+            Token::Identifier(identifier) => identifier,
+            _ => return Err(ParserError::ExpectedValidIdentifier),
         };
 
         if self.advance_token() != Token::Operator(Operator::Assignment) {
             return Err(ParserError::MustAssignToVariable(identifier));
         }
 
-        let expression = self.parse_expression()?;
-
+        let value_expression = self.parse_expression()?;
         self.expect_semicolon()?;
 
         Ok(Statement::VariableDeclaration {
             is_const,
             name: identifier,
-            value_expression: Box::new(expression),
+            value_expression: Box::new(value_expression),
         })
     }
 
@@ -174,13 +169,13 @@ impl Parser {
     fn parse_binary(&mut self, min_precedence: u8) -> Result<Expression, ParserError> {
         let mut lhs = self.parse_primary()?;
         loop {
-            let operator = self.current_token().clone();
-            let Token::Operator(operator) = operator else {
-                if operator == Token::Eof || operator == Token::Punctuation(Punctuation::CloseParenthesis) || operator == SEMICOLON_TOKEN {
-                    break;
-                }
-
-                return Err(ParserError::ExpectedOperatorButFound(operator));
+            let operator_token = self.current_token().clone();
+            let operator = match operator_token {
+                Token::Operator(operator) => operator,
+                Token::Eof
+                | Token::Punctuation(Punctuation::CloseParenthesis)
+                | Token::Punctuation(Punctuation::Semicolon) => break,
+                _ => return Err(ParserError::ExpectedOperatorButFound(operator_token)),
             };
 
             let operator_precedence = operator.precedence();
@@ -212,16 +207,14 @@ impl Parser {
             Token::Literal(literal) => Expression::Literal(literal),
             Token::Punctuation(Punctuation::OpenParenthesis) => {
                 let expr = self.parse_expression()?;
-
                 if self.advance_token() != Token::Punctuation(Punctuation::CloseParenthesis) {
                     return Err(ParserError::MissingClosingParenthesis);
                 }
-
                 expr
             }
-            Token::Operator(op) => {
-                if !op.is_unary() {
-                    return Err(ParserError::TryingToParseUnexpectedOperator(op));
+            Token::Operator(operator) => {
+                if !operator.is_unary() {
+                    return Err(ParserError::TryingToParseUnexpectedOperator(operator));
                 }
 
                 let expression = self.parse_primary()?;
@@ -229,11 +222,10 @@ impl Parser {
                     return Err(ParserError::InvalidUnaryExpression);
                 }
 
-                Expression::Unary(op, Box::new(expression))
+                Expression::Unary(operator, Box::new(expression))
             }
             _ => return Err(ParserError::TryingToParseUnexpectedToken(token)),
         };
-
         Ok(expression)
     }
 }
