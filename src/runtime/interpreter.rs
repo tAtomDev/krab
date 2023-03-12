@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use crate::{
     common::{tokens::Operator, Value},
     core::{
@@ -10,20 +8,23 @@ use crate::{
 };
 
 use super::Environment;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum RuntimeError {
+    #[error("Lexical Error: {0}")]
     LexicalError(LexicalError),
+    #[error("Parser Error: {0}")]
     ParserError(ParserError),
-}
 
-impl Display for RuntimeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::LexicalError(e) => write!(f, "Lexical Error: {}", e),
-            Self::ParserError(e) => write!(f, "Parser Error: {}", e),
-        }
-    }
+    #[error("Runtime Error: variable `{0}` not found in this scope")]
+    VariableNotFound(String),
+    #[error("Runtime Error: cannot redeclare variable `{0}`")]
+    CannotRedeclareVariable(String),
+    #[error("Runtime Error: cannot reassign to constant variable `{0}`")]
+    CannotReassignConstVariable(String),
+    #[error("Runtime Error: cannot reassign a different type to `{0}`")]
+    CannotReassignDifferentType(String),
 }
 
 pub struct Interpreter {
@@ -52,46 +53,49 @@ impl Interpreter {
     }
 
     pub fn evaluate(&mut self, program: Vec<Statement>) -> Result<Value, RuntimeError> {
-        let value = program
-            .into_iter()
-            .map(|statement| self.evaluate_statement(statement))
-            .last()
-            .unwrap_or(Value::Nothing);
+        let mut last_value = Value::Nothing;
 
-        Ok(value)
+        for statement in program {
+            last_value = self.evaluate_statement(statement)?;
+        }
+
+        Ok(last_value)
     }
 
-    fn evaluate_statement(&mut self, statement: Statement) -> Value {
-        match statement {
+    fn evaluate_statement(&mut self, statement: Statement) -> Result<Value, RuntimeError> {
+        let value = match statement {
             Statement::Empty => Value::Nothing,
-            Statement::Expression(expression) => self.evaluate_expression(expression),
+            Statement::Expression(expression) => self.evaluate_expression(expression)?,
             Statement::VariableDeclaration {
                 is_const,
                 name,
                 value_expression,
             } => {
-                let value = self.evaluate_expression(*value_expression);
+                let value = self.evaluate_expression(*value_expression)?;
                 self.environment
-                    .declare_variable(name, value.clone(), is_const);
+                    .declare_variable(name, value.clone(), is_const)?;
 
                 value
             }
             Statement::Assignment(identifier, expression) => {
-                let value = self.evaluate_expression(*expression);
-                self.environment.assign_variable(identifier, value.clone());
+                let value = self.evaluate_expression(*expression)?;
+                self.environment
+                    .assign_variable(identifier, value.clone())?;
 
                 value
             }
             _ => unimplemented!(),
-        }
+        };
+
+        Ok(value)
     }
 
-    fn evaluate_expression(&self, expression: Expression) -> Value {
-        match expression {
+    fn evaluate_expression(&self, expression: Expression) -> Result<Value, RuntimeError> {
+        let value = match expression {
             Expression::Literal(literal) => literal.into(),
-            Expression::Binary(..) => self.evaluate_binary_expression(expression),
+            Expression::Binary(..) => self.evaluate_binary_expression(expression)?,
             Expression::Unary(op, expression) => {
-                let evaluated = self.evaluate_expression(*expression);
+                let evaluated = self.evaluate_expression(*expression)?;
                 if op == Operator::Subtract {
                     (-evaluated).unwrap()
                 } else {
@@ -104,29 +108,33 @@ impl Interpreter {
                 }
 
                 self.environment
-                    .get_variable(&identifier.name)
+                    .get_variable(&identifier.name)?
                     .value
                     .clone()
             }
-        }
+        };
+
+        Ok(value)
     }
 
-    fn evaluate_binary_expression(&self, expression: Expression) -> Value {
+    fn evaluate_binary_expression(&self, expression: Expression) -> Result<Value, RuntimeError> {
         let Expression::Binary(lhs, op, rhs) = expression else {
             unreachable!()
         };
 
-        let lhs = self.evaluate_expression(*lhs);
-        let rhs = self.evaluate_expression(*rhs);
+        let lhs = self.evaluate_expression(*lhs)?;
+        let rhs = self.evaluate_expression(*rhs)?;
 
-        match op {
+        let value = match op {
             Operator::Add => (lhs + rhs).unwrap(),
             Operator::Subtract => (lhs - rhs).unwrap(),
             Operator::Multiply => (lhs * rhs).unwrap(),
             Operator::Divide => (lhs / rhs).unwrap(),
             Operator::Modulo => (lhs % rhs).unwrap(),
             _ => panic!("Invalid operator provided"),
-        }
+        };
+
+        Ok(value)
     }
 }
 

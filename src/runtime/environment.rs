@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::common::Value;
 
+use super::RuntimeError;
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Variable {
     pub value: Value,
@@ -26,17 +28,23 @@ impl Environment {
         variable_name: impl Into<String>,
         value: Value,
         is_const: bool,
-    ) {
+    ) -> Result<(), RuntimeError> {
         let variable_name = variable_name.into();
         if self.variables.contains_key(&variable_name) {
-            panic!("Cannot redeclare variable `{}`", variable_name);
+            return Err(RuntimeError::CannotRedeclareVariable(variable_name));
         }
 
         self.variables
             .insert(variable_name, Variable { value, is_const });
+
+        Ok(())
     }
 
-    pub fn assign_variable(&mut self, variable_name: impl Into<String>, value: Value) {
+    pub fn assign_variable(
+        &mut self,
+        variable_name: impl Into<String>,
+        value: Value,
+    ) -> Result<(), RuntimeError> {
         let variable_name = variable_name.into();
 
         // Try to get the mutable variable from this environment
@@ -46,28 +54,31 @@ impl Environment {
                 return parent.assign_variable(variable_name, value)
             }
 
-            // Or panic if there's no parent to look for
-            panic!("Variable `{}` not found", variable_name);
+            return Err(RuntimeError::VariableNotFound(variable_name));
         };
 
         if variable.is_const {
-            panic!("Cannot assign to constant variable `{}`", variable_name);
+            return Err(RuntimeError::CannotReassignConstVariable(variable_name));
         }
 
         // Check if variables are of the same type
         if std::mem::discriminant(&variable.value) != std::mem::discriminant(&value) {
-            panic!("Trying to assign a different type to `{}`", variable_name);
+            return Err(RuntimeError::CannotReassignDifferentType(variable_name));
         }
 
         variable.value = value;
+        Ok(())
     }
 
-    pub fn get_variable(&self, variable_name: impl Into<String>) -> &Variable {
+    pub fn get_variable(
+        &self,
+        variable_name: impl Into<String>,
+    ) -> Result<&Variable, RuntimeError> {
         let variable_name = variable_name.into();
 
         // Try to get the variable from this environment
         if let Some(variable) = self.variables.get(&variable_name) {
-            return variable;
+            return Ok(variable);
         };
 
         // If nothing was found, try to get the variable from the parent environment
@@ -76,6 +87,6 @@ impl Environment {
         }
 
         // Trying to access an variable that was not defined
-        panic!("Cannot find `{}` in this scope", variable_name);
+        Err(RuntimeError::VariableNotFound(variable_name))
     }
 }
