@@ -60,13 +60,16 @@ fn main() {
                 continue;
             }
 
-            let variables = interpreter
-                .environment
-                .variables
-                .iter()
-                .fold(String::new(), |acc, (name, value)| {
-                    format!("{acc}\n\"{name}\" = {value:?}")
-                });
+            let variables = interpreter.environment.variables.iter().fold(
+                String::new(),
+                |acc, (name, variable)| {
+                    format!(
+                        "{acc}\n{} \"{name}\" = {:?}",
+                        if variable.is_const { "const" } else { "let" },
+                        variable.value
+                    )
+                },
+            );
 
             println!("\x1b[36m{}\x1b[0m", variables.trim());
             continue;
