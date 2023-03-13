@@ -274,7 +274,12 @@ impl Parser {
                 _ => return Err(ParserError::ExpectedOperatorButFound(operator_token)),
             };
 
-            let operator_precedence = operator.precedence();
+            let operator_precedence = if operator.is_logical() {
+                operator.logical_precedence()
+            } else {
+                operator.precedence()
+            };
+            
             if operator_precedence < min_precedence {
                 break;
             }

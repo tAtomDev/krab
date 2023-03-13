@@ -77,6 +77,18 @@ impl Operator {
         matches!(self, Operator::Add | Operator::Subtract | Operator::Not)
     }
 
+    pub const fn is_logical(self) -> bool {
+        matches!(self, Operator::And | Operator::Or)
+    }
+
+    pub const fn logical_precedence(self) -> u8 {
+        match self {
+            Operator::And => 3,
+            Operator::Or => 2,
+            _ => 0,
+        }
+    }
+
     pub const fn precedence(self) -> u8 {
         match self {
             Operator::Add | Operator::Subtract => 1,
