@@ -79,13 +79,13 @@ impl Interpreter {
     }
 
     /*
-    ** // scope 0
-    ** if true {
-    **    // scope 1
-    **    { let x = 0; /* scope 2 */ }    
-    ** }
-    ** 
-    */
+     ** // scope 0
+     ** if true {
+     **    // scope 1
+     **    { let x = 0; /* scope 2 */ }
+     ** }
+     **
+     */
     fn downgrade_environment_scope(&mut self) {
         if let Some(parent) = &self.environment.parent {
             self.environment = (**parent).clone();
@@ -134,7 +134,7 @@ impl Interpreter {
                 self.downgrade_environment_scope();
 
                 value
-            },
+            }
             Expression::Unary(op, expression) => {
                 let evaluated = self.evaluate_expression(*expression)?;
                 if op == Operator::Subtract {
@@ -207,15 +207,15 @@ impl Interpreter {
                 let rhs = rhs.as_boolean().ok_or(RuntimeError::ExpectedBoolean)?;
 
                 Ok(Value::Boolean(lhs && rhs))
-            },
+            }
             Operator::Or => {
                 let lhs = lhs.as_boolean().ok_or(RuntimeError::ExpectedBoolean)?;
                 let rhs = rhs.as_boolean().ok_or(RuntimeError::ExpectedBoolean)?;
 
                 Ok(Value::Boolean(lhs || rhs))
-            },
+            }
             Operator::NotEqual => Ok(Value::Boolean(lhs != rhs)),
-            _ => return Err(RuntimeError::InvalidOperator),
+            _ => Err(RuntimeError::InvalidOperator),
         }
     }
 }

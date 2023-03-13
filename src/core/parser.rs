@@ -279,7 +279,7 @@ impl Parser {
             } else {
                 operator.precedence()
             };
-            
+
             if operator_precedence < min_precedence {
                 break;
             }
