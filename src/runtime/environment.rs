@@ -10,6 +10,7 @@ pub struct Variable {
     pub is_const: bool,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     pub parent: Option<Box<Environment>>,
     pub variables: HashMap<String, Variable>,

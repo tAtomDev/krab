@@ -27,6 +27,8 @@ pub enum ParserError {
     TryingToParseUnexpectedToken(Token),
     #[error("invalid unary expression")]
     InvalidUnaryExpression,
+    #[error("'{0}' expected")]
+    Expected(char),
 }
 
 pub struct Parser {
@@ -90,6 +92,9 @@ impl Parser {
             Token::Punctuation(Punctuation::Semicolon) => {
                 self.advance_token();
                 Ok(Node::Empty)
+            }
+            Token::Punctuation(Punctuation::OpenBrace) => {
+                Ok(Node::Expression(Expression::Body(self.parse_body()?)))
             }
             _ => {
                 let stmt = self.parse_statement()?;
@@ -161,7 +166,12 @@ impl Parser {
 
                 Ok(Statement::Return(expression))
             }
-            _ => panic!("Keyword {:?} not implemented yer", keyword),
+            Keyword::If => {
+                let expression = self.parse_if()?;
+
+                Ok(Statement::Expression(expression))
+            }
+            _ => panic!("Keyword {:?} not implemented yet", keyword),
         }
     }
 
@@ -186,6 +196,65 @@ impl Parser {
         })
     }
 
+    fn parse_if(&mut self) -> Result<Expression, ParserError> {
+        let condition = self.parse_expression()?;
+
+        let body = self.parse_body()?;
+
+        let else_expression = self.parse_else()?;
+
+        Ok(Expression::If {
+            condition: Box::new(condition),
+            body: Box::new(Expression::Body(body)),
+            else_branch: else_expression.map(Box::new),
+        })
+    }
+
+    fn parse_else(&mut self) -> Result<Option<Expression>, ParserError> {
+        if self.current_token() == &Token::Keyword(Keyword::Else) {
+            // Skip the else keywor?/d
+            self.advance_token();
+
+            // Check for else if's
+            if self.current_token() == &Token::Keyword(Keyword::If) {
+                self.advance_token();
+                return Ok(Some(self.parse_if()?));
+            }
+
+            // Simple else expression
+            let body = self.parse_body()?;
+
+            Ok(Some(Expression::Body(body)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_body(&mut self) -> Result<Body, ParserError> {
+        if self.advance_token() != Token::Punctuation(Punctuation::OpenBrace) {
+            return Err(ParserError::Expected('{'));
+        }
+
+        let mut body = vec![];
+
+        loop {
+            if self.is_at_end() {
+                return Err(ParserError::Expected('}'));
+            }
+
+            if self.current_token() == &Token::Punctuation(Punctuation::CloseBrace) {
+                self.advance_token();
+                break;
+            }
+
+            let node = self.parse_node()?;
+
+            body.push(node);
+        }
+
+        Ok(body)
+    }
+
     fn parse_expression(&mut self) -> Result<Expression, ParserError> {
         self.parse_binary(0)
     }
@@ -201,7 +270,7 @@ impl Parser {
 
             let operator = match operator_token {
                 Token::Operator(operator) => operator,
-                Token::Eof | Token::Punctuation(Punctuation::CloseParenthesis) => break,
+                Token::Eof | Token::Punctuation(_) => break,
                 _ => return Err(ParserError::ExpectedOperatorButFound(operator_token)),
             };
 

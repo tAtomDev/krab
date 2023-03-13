@@ -21,14 +21,18 @@ pub enum RuntimeError {
     InvalidType,
     #[error("Runtime Error: expected a boolean")]
     ExpectedBoolean,
+    #[error("Runtime Error: expected a boolean value in the if condition.")]
+    ConditionShouldBeABoolean,
+    #[error("Runtime Error: invalid operator provided")]
+    InvalidOperator,
 
     #[error("Runtime Error: variable `{0}` not found in this scope")]
     VariableNotFound(String),
     #[error("Runtime Error: cannot redeclare variable `{0}`")]
     CannotRedeclareVariable(String),
-    #[error("Runtime Error: cannot reassign to constant variable `{0}`")]
+    #[error("Runtime Error: cannot assign to constant variable `{0}`")]
     CannotReassignConstVariable(String),
-    #[error("Runtime Error: cannot reassign a different type to `{0}`")]
+    #[error("Runtime Error: cannot assign a value of a different type to variable `{0}`.")]
     CannotReassignDifferentType(String),
 }
 
@@ -74,6 +78,25 @@ impl Interpreter {
         Ok(last_value)
     }
 
+    /*
+    ** // scope 0
+    ** if true {
+    **    // scope 1
+    **    { let x = 0; /* scope 2 */ }    
+    ** }
+    ** 
+    */
+    fn downgrade_environment_scope(&mut self) {
+        if let Some(parent) = &self.environment.parent {
+            self.environment = (**parent).clone();
+        }
+    }
+
+    fn upgrade_environment_scope(&mut self) {
+        let env = Environment::new(Some(Box::new(self.environment.clone())));
+        self.environment = env;
+    }
+
     fn evaluate_statement(&mut self, statement: Statement) -> Result<Value, RuntimeError> {
         let value = match statement {
             Statement::Expression(expression) => self.evaluate_expression(expression)?,
@@ -101,10 +124,17 @@ impl Interpreter {
         Ok(value)
     }
 
-    fn evaluate_expression(&self, expression: Expression) -> Result<Value, RuntimeError> {
+    fn evaluate_expression(&mut self, expression: Expression) -> Result<Value, RuntimeError> {
         let value = match expression {
             Expression::Literal(literal) => literal.into(),
             Expression::Binary(..) => self.evaluate_binary_expression(expression)?,
+            Expression::Body(body) => {
+                self.upgrade_environment_scope();
+                let value = self.evaluate(body)?;
+                self.downgrade_environment_scope();
+
+                value
+            },
             Expression::Unary(op, expression) => {
                 let evaluated = self.evaluate_expression(*expression)?;
                 if op == Operator::Subtract {
@@ -129,12 +159,35 @@ impl Interpreter {
                     .value
                     .clone()
             }
+            Expression::If {
+                condition,
+                body,
+                else_branch,
+            } => {
+                let condition = self.evaluate_expression(*condition)?;
+                let condition = condition
+                    .as_boolean()
+                    .ok_or(RuntimeError::ConditionShouldBeABoolean)?;
+
+                if condition {
+                    return self.evaluate_expression(*body);
+                }
+
+                if let Some(else_branch) = else_branch {
+                    return self.evaluate_expression(*else_branch);
+                }
+
+                Value::Nothing
+            }
         };
 
         Ok(value)
     }
 
-    fn evaluate_binary_expression(&self, expression: Expression) -> Result<Value, RuntimeError> {
+    fn evaluate_binary_expression(
+        &mut self,
+        expression: Expression,
+    ) -> Result<Value, RuntimeError> {
         let Expression::Binary(lhs, op, rhs) = expression else {
             unreachable!()
         };
@@ -149,8 +202,20 @@ impl Interpreter {
             Operator::Divide => (lhs / rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Modulo => (lhs % rhs).map_err(|_| RuntimeError::InvalidType),
             Operator::Equal => Ok(Value::Boolean(lhs == rhs)),
+            Operator::And => {
+                let lhs = lhs.as_boolean().ok_or(RuntimeError::ExpectedBoolean)?;
+                let rhs = rhs.as_boolean().ok_or(RuntimeError::ExpectedBoolean)?;
+
+                Ok(Value::Boolean(lhs && rhs))
+            },
+            Operator::Or => {
+                let lhs = lhs.as_boolean().ok_or(RuntimeError::ExpectedBoolean)?;
+                let rhs = rhs.as_boolean().ok_or(RuntimeError::ExpectedBoolean)?;
+
+                Ok(Value::Boolean(lhs || rhs))
+            },
             Operator::NotEqual => Ok(Value::Boolean(lhs != rhs)),
-            _ => panic!("Invalid operator provided"),
+            _ => return Err(RuntimeError::InvalidOperator),
         }
     }
 }

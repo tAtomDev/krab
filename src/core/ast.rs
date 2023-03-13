@@ -23,11 +23,6 @@ pub enum Statement {
         condition: Expression,
         body: Body,
     },
-    If {
-        condition: Expression,
-        body: Body,
-        else_branch: Option<Body>,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -36,6 +31,12 @@ pub enum Expression {
     Identifier(Identifier),
     Binary(Box<Expression>, Operator, Box<Expression>),
     Unary(Operator, Box<Expression>),
+    Body(Body),
+    If {
+        condition: Box<Expression>,
+        body: Box<Expression>,
+        else_branch: Option<Box<Expression>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
