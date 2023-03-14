@@ -46,7 +46,7 @@ pub enum EvalResult {
 }
 
 impl EvalResult {
-    pub fn as_value(self) -> Value {
+    pub fn parse_value(self) -> Value {
         match self {
             Self::Value(value) => value,
             _ => panic!("EvalResult was expected to be Value"),
@@ -133,14 +133,14 @@ impl Interpreter {
                 name,
                 value_expression,
             } => {
-                let value = self.evaluate_expression(*value_expression)?.as_value();
+                let value = self.evaluate_expression(*value_expression)?.parse_value();
                 self.environment
                     .declare_variable(name, value.clone(), is_const)?;
 
                 EvalResult::Value(value)
             }
             Statement::Assignment(identifier, expression) => {
-                let value = self.evaluate_expression(*expression)?.as_value();
+                let value = self.evaluate_expression(*expression)?.parse_value();
                 self.environment
                     .assign_variable(identifier, value.clone())?;
 
@@ -166,7 +166,7 @@ impl Interpreter {
                 res
             }
             Expression::Unary(op, expression) => {
-                let evaluated = self.evaluate_expression(*expression)?.as_value();
+                let evaluated = self.evaluate_expression(*expression)?.parse_value();
                 if op == Operator::Subtract {
                     EvalResult::Value((-evaluated).unwrap())
                 } else if op == Operator::Not {
@@ -196,7 +196,7 @@ impl Interpreter {
                 body,
                 else_branch,
             } => {
-                let condition = self.evaluate_expression(*condition)?.as_value();
+                let condition = self.evaluate_expression(*condition)?.parse_value();
                 let condition = condition
                     .as_boolean()
                     .ok_or(RuntimeError::ConditionShouldBeABoolean)?;
@@ -223,7 +223,9 @@ impl Interpreter {
             Expression::While { condition, body } => {
                 let mut while_value = None;
                 loop {
-                    let condition = self.evaluate_expression(*(condition.clone()))?.as_value();
+                    let condition = self
+                        .evaluate_expression(*(condition.clone()))?
+                        .parse_value();
                     let condition = condition
                         .as_boolean()
                         .ok_or(RuntimeError::ConditionShouldBeABoolean)?;
@@ -263,8 +265,8 @@ impl Interpreter {
             unreachable!()
         };
 
-        let lhs = self.evaluate_expression(*lhs)?.as_value();
-        let rhs = self.evaluate_expression(*rhs)?.as_value();
+        let lhs = self.evaluate_expression(*lhs)?.parse_value();
+        let rhs = self.evaluate_expression(*rhs)?.parse_value();
 
         match op {
             Operator::Add => (lhs + rhs).map_err(|_| RuntimeError::InvalidType),
@@ -319,7 +321,7 @@ mod tests {
     fn basic_math() {
         let (mut interpreter, content) =
             _create_interpreter_and_read_file("./examples/basic_math.krab");
-        let evaluated = interpreter.evaluate_source(&content).unwrap().as_value();
+        let evaluated = interpreter.evaluate_source(&content).unwrap().parse_value();
 
         assert_eq!(evaluated, Value::Integer(1))
     }
@@ -328,7 +330,7 @@ mod tests {
     fn basic_if() {
         let (mut interpreter, content) =
             _create_interpreter_and_read_file("./examples/basic_if.krab");
-        let evaluated = interpreter.evaluate_source(&content).unwrap().as_value();
+        let evaluated = interpreter.evaluate_source(&content).unwrap().parse_value();
 
         assert_eq!(evaluated, Value::String("10".into()))
     }

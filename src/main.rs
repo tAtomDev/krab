@@ -96,7 +96,7 @@ fn main() {
         }
 
         let value = match interpreter.evaluate_source(&buffer) {
-            Ok(v) => v.as_value(),
+            Ok(v) => v.parse_value(),
             Err(e) => {
                 eprintln!("\x1b[31m{}", e);
                 continue;
