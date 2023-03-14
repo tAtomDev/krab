@@ -383,6 +383,12 @@ impl Parser {
             }
             Token::Operator(operator) => {
                 if operator.is_unary() {
+                    if let Token::Operator(op) = self.current_token() {
+                        if op.is_unary() {
+                            return Err(ParserError::InvalidUnaryExpression);
+                        }
+                    }
+
                     let expression = self.parse_expression()?;
                     Expression::Unary(operator, Box::new(expression))
                 } else {

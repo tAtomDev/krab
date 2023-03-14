@@ -335,4 +335,17 @@ mod tests {
 
         assert_eq!(evaluated, Value::String("10".into()))
     }
+
+    #[test]
+    fn basic_logical() {
+        let (mut interpreter, content) =
+            _create_interpreter_and_read_file("./examples/basic_logical.krab");
+        let evaluated = interpreter
+            .evaluate_source(&content)
+            .unwrap()
+            .parse_value()
+            .unwrap();
+
+        assert_eq!(evaluated, Value::Boolean(true))
+    }
 }
