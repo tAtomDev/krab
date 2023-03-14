@@ -60,6 +60,13 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_string(self) -> String {
+        match self {
+            Value::String(string) => string,
+            _ => self.to_string(),
+        }
+    }
 }
 
 impl Neg for Value {
@@ -118,19 +125,25 @@ impl Add for Value {
 
         match self {
             Self::Integer(v) => {
-                let rhs = rhs
-                    .as_integer()
-                    .context(concat!("invalid type: Integer expected for addition"))?;
-                Ok(Self::Integer(v.add(rhs)))
+                let result = match rhs {
+                    Self::Integer(rhs) => Self::Integer(v.add(rhs)),
+                    Self::String(rhs) => Self::String(format!("{v}{rhs}")),
+                    _ => bail!("invalid type: Integer expected for addition")
+                };
+
+                Ok(result)
             }
             Self::Float(v) => {
-                let rhs = rhs
-                    .as_float()
-                    .context(concat!("invalid type: Float expected for addition"))?;
-                Ok(Self::Float(v.add(rhs)))
+                let result = match rhs {
+                    Self::Float(rhs) => Self::Float(v.add(rhs)),
+                    Self::String(rhs) => Self::String(format!("{v}{rhs}")),
+                    _ => bail!("invalid type: Float expected for addition")
+                };
+
+                Ok(result)
             }
             Self::String(v) => {
-                let rhs = rhs.to_string();
+                let rhs = rhs.as_string();
                 Ok(Self::String(format!("{v}{rhs}")))
             }
             _ => bail!("these types cannot be added"),
