@@ -11,7 +11,7 @@ use super::ast::{Body, Node};
 pub enum ParserError {
     #[error("expected semicolon ';'")]
     ExpectedSemicolon,
-    #[error("invalid token '{0}'")]
+    #[error("invalid token {0}")]
     InvalidToken(Token),
     #[error("invalid expression")]
     InvalidExpression,
@@ -19,11 +19,11 @@ pub enum ParserError {
     ExpectedValidIdentifier,
     #[error("you must assign a value to the '{0}' variable")]
     MustAssignToVariable(String),
-    #[error("expected operator but found '{0}'")]
+    #[error("expected operator but found {0}")]
     ExpectedOperatorButFound(Token),
     #[error("missing ')' at the end of the expression")]
     MissingClosingParenthesis,
-    #[error("trying to parse unexpected operator: {0:?}")]
+    #[error("trying to parse unexpected operator: {0}")]
     TryingToParseUnexpectedOperator(Operator),
     #[error("trying to parse unexpected token: {0}")]
     TryingToParseUnexpectedToken(Token),

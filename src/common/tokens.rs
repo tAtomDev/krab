@@ -13,7 +13,15 @@ pub enum Token {
 
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Token::Keyword(x) => write!(f, "{x}"),
+            Token::Literal(x) => write!(f, "{x}"),
+            Token::Identifier(x) => write!(f, "{x}"),
+            Token::Operator(x) => write!(f, "{x}"),
+            Token::Punctuation(x) => write!(f, "{x}"),
+            Token::Eof => write!(f, "EOF"),
+            Token::Invalid => write!(f, "InvalidToken"),
+        }
     }
 }
 
@@ -23,6 +31,17 @@ pub enum Literal {
     Float(f32),
     String(String),
     Boolean(bool),
+}
+
+impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer(x) => write!(f, "{x}"),
+            Self::Float(x) => write!(f, "{x}"),
+            Self::String(x) => write!(f, "\"{x}\""),
+            Self::Boolean(x) => write!(f, "{x}"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
@@ -36,6 +55,22 @@ pub enum Keyword {
     Return,
     Break,
     Continue,
+}
+
+impl Display for Keyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Let => write!(f, "let"),
+            Self::Const => write!(f, "const"),
+            Self::If => write!(f, "if"),
+            Self::Else => write!(f, "else"),
+            Self::While => write!(f, "while"),
+            Self::Function => write!(f, "fn"),
+            Self::Return => write!(f, "return"),
+            Self::Break => write!(f, "break"),
+            Self::Continue => write!(f, "continue"),
+        }
+    }
 }
 
 pub const SEMICOLON_TOKEN: Token = Token::Punctuation(Punctuation::Semicolon);
@@ -59,6 +94,30 @@ pub enum Operator {
     LessOrEqual,
     GreaterOrEqual,
     Arrow,
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => write!(f, "+"),
+            Self::Subtract => write!(f, "-"),
+            Self::Multiply => write!(f, "*"),
+            Self::Divide => write!(f, "/"),
+            Self::Modulo => write!(f, "%"),
+            Self::Power => write!(f, "^"),
+            Self::And => write!(f, "&&"),
+            Self::Or => write!(f, "||"),
+            Self::Not => write!(f, "!"),
+            Self::Assignment => write!(f, "="),
+            Self::Equal => write!(f, "=="),
+            Self::NotEqual => write!(f, "!="),
+            Self::Less => write!(f, "<"),
+            Self::Greater => write!(f, ">"),
+            Self::LessOrEqual => write!(f, "<="),
+            Self::GreaterOrEqual => write!(f, ">="),
+            Self::Arrow => write!(f, "->"),
+        }
+    }
 }
 
 impl Operator {
