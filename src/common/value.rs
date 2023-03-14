@@ -60,13 +60,6 @@ impl Value {
             _ => None,
         }
     }
-
-    pub fn as_string(&self) -> Option<&str> {
-        match self {
-            Value::String(s) => Some(s.as_str()),
-            _ => None,
-        }
-    }
 }
 
 impl Neg for Value {
@@ -115,7 +108,36 @@ macro_rules! impl_value_op {
     };
 }
 
-impl_value_op!(add, Add, "addition");
+impl Add for Value {
+    type Output = anyhow::Result<Value>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        if self == Self::Nothing {
+            return Ok(rhs);
+        }
+
+        match self {
+            Self::Integer(v) => {
+                let rhs = rhs
+                    .as_integer()
+                    .context(concat!("invalid type: Integer expected for addition"))?;
+                Ok(Self::Integer(v.add(rhs)))
+            }
+            Self::Float(v) => {
+                let rhs = rhs
+                    .as_float()
+                    .context(concat!("invalid type: Float expected for addition"))?;
+                Ok(Self::Float(v.add(rhs)))
+            }
+            Self::String(v) => {
+                let rhs = rhs.to_string();
+                Ok(Self::String(format!("{v}{rhs}")))
+            }
+            _ => bail!("these types cannot be added"),
+        }
+    }
+}
+
 impl_value_op!(sub, Sub, "subtraction");
 impl_value_op!(mul, Mul, "multiplication");
 impl_value_op!(div, Div, "division");

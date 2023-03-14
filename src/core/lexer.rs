@@ -41,7 +41,10 @@ impl Lexer {
             tokens.push(token);
         }
 
-        tokens.push(Token::Eof);
+        if !tokens.ends_with(&[Token::Eof]) {
+            tokens.push(Token::Eof);
+        }
+
         Ok(tokens)
     }
 
@@ -72,7 +75,21 @@ impl Lexer {
     }
 
     fn scan_token(&mut self) -> Result<Token, LexicalError> {
+        if self.is_at_end() {
+            return Ok(Token::Eof);
+        }
+
         let c = self.advance_char();
+
+        if c == '/' && self.check_char_and_advance('/') {
+            // This is a single-line comment, so we skip until the end of the line.
+            while !self.is_at_end() && self.current_char() != '\n' {
+                self.advance_char();
+            }
+
+            // We continue scanning for the next token.
+            return self.scan_token();
+        }
 
         let token = match c {
             '(' => Token::Punctuation(Punctuation::OpenParenthesis),
@@ -96,7 +113,32 @@ impl Lexer {
                 }
             }
             '*' => Token::Operator(Operator::Multiply),
-            '/' => Token::Operator(Operator::Divide),
+            '/' => {
+                if self.check_char_and_advance('/') {
+                    // Ignore single-line comments
+                    while !self.is_at_end() && self.current_char() != '\n' {
+                        self.advance_char();
+                    }
+                    Token::Invalid
+                } else if self.check_char_and_advance('*') {
+                    // Ignore multi-line comments
+                    let mut comment_level = 1;
+                    while comment_level > 0 && !self.is_at_end() {
+                        let c1 = self.advance_char();
+                        let c2 = self.current_char();
+                        if c1 == '*' && c2 == '/' {
+                            self.advance_char();
+                            comment_level -= 1;
+                        } else if c1 == '/' && c2 == '*' {
+                            self.advance_char();
+                            comment_level += 1;
+                        }
+                    }
+                    Token::Invalid
+                } else {
+                    Token::Operator(Operator::Divide)
+                }
+            }
             '%' => Token::Operator(Operator::Modulo),
             '^' => Token::Operator(Operator::Power),
             '!' => {

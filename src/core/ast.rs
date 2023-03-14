@@ -1,4 +1,7 @@
-use crate::common::tokens::{Literal, Operator};
+use crate::common::{
+    tokens::{Literal, Operator},
+    ControlFlow,
+};
 
 pub type Body = Vec<Node>;
 
@@ -19,10 +22,6 @@ pub enum Statement {
     Assignment(String, Box<Expression>),
     Expression(Expression),
     Return(Expression),
-    While {
-        condition: Expression,
-        body: Body,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -37,6 +36,11 @@ pub enum Expression {
         body: Box<Expression>,
         else_branch: Option<Box<Expression>>,
     },
+    While {
+        condition: Box<Expression>,
+        body: Box<Expression>,
+    },
+    ControlFlow(ControlFlow, Option<Box<Expression>>),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]

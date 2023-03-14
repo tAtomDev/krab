@@ -1,6 +1,6 @@
 use crate::{
     ast::{Expression, Identifier, IdentifierKind, Statement},
-    common::tokens::*,
+    common::{tokens::*, ControlFlow},
 };
 
 use thiserror::Error;
@@ -13,6 +13,8 @@ pub enum ParserError {
     ExpectedSemicolon,
     #[error("invalid token '{0}'")]
     InvalidToken(Token),
+    #[error("invalid expression")]
+    InvalidExpression,
     #[error("expected a valid identifier")]
     ExpectedValidIdentifier,
     #[error("you must assign a value to the '{0}' variable")]
@@ -29,6 +31,8 @@ pub enum ParserError {
     InvalidUnaryExpression,
     #[error("'{0}' expected")]
     Expected(char),
+    #[error("expected {0} but found {1}")]
+    ExpectedButFound(&'static str, String),
 }
 
 pub struct Parser {
@@ -93,9 +97,7 @@ impl Parser {
                 self.advance_token();
                 Ok(Node::Empty)
             }
-            Token::Punctuation(Punctuation::OpenBrace) => {
-                Ok(Node::Expression(Expression::Body(self.parse_body()?)))
-            }
+            Token::Punctuation(Punctuation::OpenBrace) => Ok(Node::Expression(self.parse_body()?)),
             _ => {
                 let stmt = self.parse_statement()?;
                 if let Statement::Expression(expr) = stmt {
@@ -109,6 +111,20 @@ impl Parser {
                     Ok(Node::Statement(stmt))
                 }
             }
+        }
+    }
+
+    fn parse_expression(&mut self) -> Result<Expression, ParserError> {
+        match self.current_token() {
+            Token::Keyword(_) => {
+                let statement = self.parse_keyword()?;
+                match statement {
+                    Statement::Expression(expression) => Ok(expression),
+                    _ => Err(ParserError::InvalidExpression),
+                }
+            }
+            Token::Punctuation(Punctuation::OpenBrace) => self.parse_body(),
+            _ => self.parse_binary(0),
         }
     }
 
@@ -171,6 +187,48 @@ impl Parser {
 
                 Ok(Statement::Expression(expression))
             }
+            Keyword::While => {
+                let condition = self.parse_expression()?;
+
+                let body = self.parse_body()?;
+
+                Ok(Statement::Expression(Expression::While {
+                    condition: Box::new(condition),
+                    body: Box::new(body),
+                }))
+            }
+            Keyword::Continue => {
+                if self.current_token() == &SEMICOLON_TOKEN {
+                    return Ok(Statement::Expression(Expression::ControlFlow(
+                        ControlFlow::Continue,
+                        None,
+                    )));
+                }
+
+                let expression = self.parse_expression()?;
+                self.expect_semicolon()?;
+
+                Ok(Statement::Expression(Expression::ControlFlow(
+                    ControlFlow::Continue,
+                    Some(Box::new(expression)),
+                )))
+            }
+            Keyword::Break => {
+                if self.current_token() == &SEMICOLON_TOKEN {
+                    return Ok(Statement::Expression(Expression::ControlFlow(
+                        ControlFlow::Break,
+                        None,
+                    )));
+                }
+
+                let expression = self.parse_expression()?;
+                self.expect_semicolon()?;
+
+                Ok(Statement::Expression(Expression::ControlFlow(
+                    ControlFlow::Break,
+                    Some(Box::new(expression)),
+                )))
+            }
             _ => panic!("Keyword {:?} not implemented yet", keyword),
         }
     }
@@ -205,7 +263,7 @@ impl Parser {
 
         Ok(Expression::If {
             condition: Box::new(condition),
-            body: Box::new(Expression::Body(body)),
+            body: Box::new(body),
             else_branch: else_expression.map(Box::new),
         })
     }
@@ -224,13 +282,13 @@ impl Parser {
             // Simple else expression
             let body = self.parse_body()?;
 
-            Ok(Some(Expression::Body(body)))
+            Ok(Some(body))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_body(&mut self) -> Result<Body, ParserError> {
+    fn parse_body(&mut self) -> Result<Expression, ParserError> {
         if self.advance_token() != Token::Punctuation(Punctuation::OpenBrace) {
             return Err(ParserError::Expected('{'));
         }
@@ -252,14 +310,23 @@ impl Parser {
             body.push(node);
         }
 
-        Ok(body)
-    }
-
-    fn parse_expression(&mut self) -> Result<Expression, ParserError> {
-        self.parse_binary(0)
+        Ok(Expression::Body(body))
     }
 
     fn parse_binary(&mut self, min_precedence: u8) -> Result<Expression, ParserError> {
+        match self.current_token() {
+            // Ignore (
+            Token::Punctuation(Punctuation::OpenParenthesis) => {}
+
+            Token::Punctuation(p) => {
+                return Err(ParserError::ExpectedButFound(
+                    "a valid binary expression",
+                    format!("'{}'", p),
+                ))
+            }
+            _ => {}
+        };
+
         let mut lhs = self.parse_primary()?;
 
         loop {

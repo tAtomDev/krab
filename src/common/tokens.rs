@@ -131,3 +131,21 @@ pub enum Punctuation {
     Dot,              //.
     QuestionMark,     //?
 }
+
+impl Display for Punctuation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OpenParenthesis => write!(f, "("),
+            Self::CloseParenthesis => write!(f, ")"),
+            Self::OpenBrace => write!(f, "{{"),
+            Self::CloseBrace => write!(f, "}}"),
+            Self::OpenBrackets => write!(f, "["),
+            Self::CloseBrackets => write!(f, "]"),
+            Self::Semicolon => write!(f, ";"),
+            Self::Comma => write!(f, ","),
+            Self::Colon => write!(f, ":"),
+            Self::Dot => write!(f, "."),
+            Self::QuestionMark => write!(f, "?"),
+        }
+    }
+}

@@ -5,7 +5,7 @@ mod util;
 
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, BufReader, Read, Write},
 };
 
 use crate::{common::Value, core::*, runtime::Interpreter};
@@ -22,16 +22,20 @@ fn main() {
     let mut interpreter = Interpreter::new();
 
     let mut buffer = String::with_capacity(2048);
-    let mut stdin = io::stdin().lock();
     loop {
         buffer.clear();
         print!("\x1b[0m> \x1b[33m");
         io::stdout().flush().unwrap();
 
-        stdin.read_line(&mut buffer).unwrap();
+        match io::stdin().read_line(&mut buffer) {
+            Ok(_) => {}
+            Err(error) => {
+                eprintln!("{error}");
+                continue;
+            }
+        }
         buffer = buffer.trim().into();
         if buffer == "exit" {
-            drop(stdin);
             break;
         }
 
@@ -92,7 +96,7 @@ fn main() {
         }
 
         let value = match interpreter.evaluate_source(&buffer) {
-            Ok(v) => v,
+            Ok(v) => v.as_value(),
             Err(e) => {
                 eprintln!("\x1b[31m{}", e);
                 continue;

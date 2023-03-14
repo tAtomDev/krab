@@ -1,5 +1,5 @@
 use crate::{
-    common::{tokens::Operator, Value},
+    common::{tokens::Operator, ControlFlow, Value},
     core::{
         ast::*,
         lexer::{Lexer, LexicalError},
@@ -21,10 +21,13 @@ pub enum RuntimeError {
     InvalidType,
     #[error("Runtime Error: expected a boolean")]
     ExpectedBoolean,
-    #[error("Runtime Error: expected a boolean value in the if condition.")]
+    #[error("Runtime Error: expected a valid boolean condition value.")]
     ConditionShouldBeABoolean,
     #[error("Runtime Error: invalid operator provided")]
     InvalidOperator,
+
+    #[error("Runtime Error: expected a valid value")]
+    ExpectedAValidValue,
 
     #[error("Runtime Error: variable `{0}` not found in this scope")]
     VariableNotFound(String),
@@ -34,6 +37,28 @@ pub enum RuntimeError {
     CannotReassignConstVariable(String),
     #[error("Runtime Error: cannot assign a value of a different type to variable `{0}`.")]
     CannotReassignDifferentType(String),
+}
+
+#[derive(Debug)]
+pub enum EvalResult {
+    Value(Value),
+    ControlFlow(ControlFlow, Option<Value>),
+}
+
+impl EvalResult {
+    pub fn as_value(self) -> Value {
+        match self {
+            Self::Value(value) => value,
+            _ => panic!("EvalResult was expected to be Value"),
+        }
+    }
+
+    pub fn expect_value(self) -> Result<Value, RuntimeError> {
+        match self {
+            Self::Value(value) => Ok(value),
+            _ => Err(RuntimeError::ExpectedAValidValue),
+        }
+    }
 }
 
 pub struct Interpreter {
@@ -47,7 +72,7 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate_source(&mut self, src: &str) -> Result<Value, RuntimeError> {
+    pub fn evaluate_source(&mut self, src: &str) -> Result<EvalResult, RuntimeError> {
         let lex = match Lexer::new(src).lex() {
             Ok(lex) => lex,
             Err(e) => return Err(RuntimeError::LexicalError(e)),
@@ -61,17 +86,20 @@ impl Interpreter {
         self.evaluate(program)
     }
 
-    pub fn evaluate(&mut self, program: Body) -> Result<Value, RuntimeError> {
-        let mut last_value = Value::Nothing;
+    pub fn evaluate(&mut self, program: Body) -> Result<EvalResult, RuntimeError> {
+        let mut last_value = EvalResult::Value(Value::Nothing);
 
         for node in program {
             last_value = match node {
                 Node::Statement(statement) => {
-                    self.evaluate_statement(statement)?;
-                    Value::Nothing
+                    let result = self.evaluate_statement(statement)?;
+                    match &result {
+                        EvalResult::Value(_) => EvalResult::Value(Value::Nothing),
+                        EvalResult::ControlFlow(..) => result,
+                    }
                 }
                 Node::Expression(expression) => self.evaluate_expression(expression)?,
-                Node::Empty => Value::Nothing,
+                Node::Empty => EvalResult::Value(Value::Nothing),
             };
         }
 
@@ -97,7 +125,7 @@ impl Interpreter {
         self.environment = env;
     }
 
-    fn evaluate_statement(&mut self, statement: Statement) -> Result<Value, RuntimeError> {
+    fn evaluate_statement(&mut self, statement: Statement) -> Result<EvalResult, RuntimeError> {
         let value = match statement {
             Statement::Expression(expression) => self.evaluate_expression(expression)?,
             Statement::VariableDeclaration {
@@ -105,48 +133,50 @@ impl Interpreter {
                 name,
                 value_expression,
             } => {
-                let value = self.evaluate_expression(*value_expression)?;
+                let value = self.evaluate_expression(*value_expression)?.as_value();
                 self.environment
                     .declare_variable(name, value.clone(), is_const)?;
 
-                value
+                EvalResult::Value(value)
             }
             Statement::Assignment(identifier, expression) => {
-                let value = self.evaluate_expression(*expression)?;
+                let value = self.evaluate_expression(*expression)?.as_value();
                 self.environment
                     .assign_variable(identifier, value.clone())?;
 
-                value
+                EvalResult::Value(value)
             }
-            _ => unimplemented!(),
+            Statement::Return(_) => unimplemented!(),
         };
 
         Ok(value)
     }
 
-    fn evaluate_expression(&mut self, expression: Expression) -> Result<Value, RuntimeError> {
-        let value = match expression {
-            Expression::Literal(literal) => literal.into(),
-            Expression::Binary(..) => self.evaluate_binary_expression(expression)?,
+    fn evaluate_expression(&mut self, expression: Expression) -> Result<EvalResult, RuntimeError> {
+        let result = match expression {
+            Expression::Literal(literal) => EvalResult::Value(literal.into()),
+            Expression::Binary(..) => {
+                EvalResult::Value(self.evaluate_binary_expression(expression)?)
+            }
             Expression::Body(body) => {
                 self.upgrade_environment_scope();
-                let value = self.evaluate(body)?;
+                let res = self.evaluate(body)?;
                 self.downgrade_environment_scope();
 
-                value
+                res
             }
             Expression::Unary(op, expression) => {
-                let evaluated = self.evaluate_expression(*expression)?;
+                let evaluated = self.evaluate_expression(*expression)?.as_value();
                 if op == Operator::Subtract {
-                    (-evaluated).unwrap()
+                    EvalResult::Value((-evaluated).unwrap())
                 } else if op == Operator::Not {
                     if let Value::Boolean(bool) = evaluated {
-                        Value::Boolean(!bool)
+                        EvalResult::Value(Value::Boolean(!bool))
                     } else {
                         return Err(RuntimeError::ExpectedBoolean);
                     }
                 } else {
-                    evaluated
+                    EvalResult::Value(evaluated)
                 }
             }
             Expression::Identifier(identifier) => {
@@ -154,17 +184,19 @@ impl Interpreter {
                     panic!("Functions are not yet implemented");
                 }
 
-                self.environment
-                    .get_variable(&identifier.name)?
-                    .value
-                    .clone()
+                EvalResult::Value(
+                    self.environment
+                        .get_variable(&identifier.name)?
+                        .value
+                        .clone(),
+                )
             }
             Expression::If {
                 condition,
                 body,
                 else_branch,
             } => {
-                let condition = self.evaluate_expression(*condition)?;
+                let condition = self.evaluate_expression(*condition)?.as_value();
                 let condition = condition
                     .as_boolean()
                     .ok_or(RuntimeError::ConditionShouldBeABoolean)?;
@@ -177,11 +209,50 @@ impl Interpreter {
                     return self.evaluate_expression(*else_branch);
                 }
 
-                Value::Nothing
+                EvalResult::Value(Value::Nothing)
+            }
+            Expression::ControlFlow(flow, expression) => {
+                if let Some(expression) = expression {
+                    let expression = self.evaluate_expression(*expression)?.expect_value()?;
+
+                    EvalResult::ControlFlow(flow, Some(expression))
+                } else {
+                    EvalResult::ControlFlow(flow, None)
+                }
+            }
+            Expression::While { condition, body } => {
+                let mut while_value = None;
+                loop {
+                    let condition = self.evaluate_expression(*(condition.clone()))?.as_value();
+                    let condition = condition
+                        .as_boolean()
+                        .ok_or(RuntimeError::ConditionShouldBeABoolean)?;
+                    if !condition {
+                        break;
+                    }
+
+                    match self.evaluate_expression(*(body.clone()))? {
+                        EvalResult::Value(value) => {
+                            while_value = Some(value);
+                        }
+                        EvalResult::ControlFlow(flow, value) => {
+                            if let Some(value) = value {
+                                while_value = Some(value);
+                            }
+
+                            match flow {
+                                ControlFlow::Break => break,
+                                ControlFlow::Continue => continue,
+                            }
+                        }
+                    };
+                }
+
+                EvalResult::Value(while_value.unwrap_or(Value::Nothing))
             }
         };
 
-        Ok(value)
+        Ok(result)
     }
 
     fn evaluate_binary_expression(
@@ -192,8 +263,8 @@ impl Interpreter {
             unreachable!()
         };
 
-        let lhs = self.evaluate_expression(*lhs)?;
-        let rhs = self.evaluate_expression(*rhs)?;
+        let lhs = self.evaluate_expression(*lhs)?.as_value();
+        let rhs = self.evaluate_expression(*rhs)?.as_value();
 
         match op {
             Operator::Add => (lhs + rhs).map_err(|_| RuntimeError::InvalidType),
@@ -214,6 +285,10 @@ impl Interpreter {
 
                 Ok(Value::Boolean(lhs || rhs))
             }
+            Operator::Less => Ok(Value::Boolean(lhs < rhs)),
+            Operator::LessOrEqual => Ok(Value::Boolean(lhs <= rhs)),
+            Operator::Greater => Ok(Value::Boolean(lhs > rhs)),
+            Operator::GreaterOrEqual => Ok(Value::Boolean(lhs >= rhs)),
             Operator::NotEqual => Ok(Value::Boolean(lhs != rhs)),
             _ => Err(RuntimeError::InvalidOperator),
         }
@@ -244,8 +319,17 @@ mod tests {
     fn basic_math() {
         let (mut interpreter, content) =
             _create_interpreter_and_read_file("./examples/basic_math.krab");
-        let evaluated = interpreter.evaluate_source(&content).unwrap();
+        let evaluated = interpreter.evaluate_source(&content).unwrap().as_value();
 
         assert_eq!(evaluated, Value::Integer(1))
+    }
+
+    #[test]
+    fn basic_if() {
+        let (mut interpreter, content) =
+            _create_interpreter_and_read_file("./examples/basic_if.krab");
+        let evaluated = interpreter.evaluate_source(&content).unwrap().as_value();
+
+        assert_eq!(evaluated, Value::String("10".into()))
     }
 }
