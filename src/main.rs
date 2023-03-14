@@ -103,6 +103,14 @@ fn main() {
             }
         };
 
+        let value = match value {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("\x1b[31m{}", e);
+                continue;
+            }
+        };
+
         if value != Value::Nothing {
             println!("{}", value);
         }

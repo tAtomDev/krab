@@ -116,6 +116,7 @@ impl Parser {
 
     fn parse_expression(&mut self) -> Result<Expression, ParserError> {
         match self.current_token() {
+            Token::Punctuation(Punctuation::Semicolon) => Err(ParserError::ExpectedButFound("a valid expression", ";".into())),
             Token::Keyword(_) => {
                 let statement = self.parse_keyword()?;
                 match statement {
