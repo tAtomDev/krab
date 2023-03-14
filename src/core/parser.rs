@@ -443,17 +443,16 @@ fn try_parse_expression_type(expression: &Expression) -> Result<Option<Type>, Pa
             v.ty().map_err(|_| ParserError::InvalidType)?
         }
         Expression::Binary(a, op, b) => {
-            let a = try_parse_expression_type(&a)?;
-            let b = try_parse_expression_type(&b)?;
+            let a = try_parse_expression_type(a)?;
+            let b = try_parse_expression_type(b)?;
 
             if !op.is_logical() && a != b {
                 return Ok(None);
             }
 
-            let ty = a.ok_or(ParserError::InvalidType)?;
-            ty
+            a.ok_or(ParserError::InvalidType)?
         }
-        Expression::Unary(_, v) => return try_parse_expression_type(&v),
+        Expression::Unary(_, v) => return try_parse_expression_type(v),
         _ => return Ok(None),
     };
 
@@ -505,7 +504,7 @@ mod tests {
 
     #[test]
     fn complex_math_expression() {
-        let code = "let x = x * ((2 + 3 * 4) / (5 - 1));\nx";
+        let code = "let x = 0; x = x * ((2 + 3 * 4) / (5 - 1)); x";
         let program = Parser::new(Lexer::new(code).lex().unwrap())
             .parse()
             .unwrap();
@@ -516,7 +515,12 @@ mod tests {
                 Node::Statement(Statement::VariableDeclaration {
                     name: "x".into(),
                     ty: Type::Int,
-                    value_expression: Box::new(Expression::Binary(
+                    is_const: false,
+                    value_expression: Box::new(Expression::Literal(Literal::Integer(0)))
+                }),
+                Node::Statement(Statement::Assignment(
+                    "x".into(),
+                    Box::new(Expression::Binary(
                         Box::new(Expression::Identifier(Identifier {
                             kind: IdentifierKind::Variable,
                             name: "x".into()
@@ -539,9 +543,8 @@ mod tests {
                                 Box::new(Expression::Literal(Literal::Integer(1)))
                             )),
                         ))
-                    )),
-                    is_const: false,
-                }),
+                    ))
+                )),
                 Node::Expression(Expression::Identifier(Identifier {
                     kind: IdentifierKind::Variable,
                     name: "x".into()

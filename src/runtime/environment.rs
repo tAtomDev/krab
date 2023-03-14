@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::common::{Value, Type};
+use crate::common::{Type, Value};
 
 use super::RuntimeError;
 
@@ -37,8 +37,14 @@ impl Environment {
             return Err(RuntimeError::CannotRedeclareVariable(variable_name));
         }
 
-        self.variables
-            .insert(variable_name, Variable { ty, value, is_const });
+        self.variables.insert(
+            variable_name,
+            Variable {
+                ty,
+                value,
+                is_const,
+            },
+        );
 
         Ok(())
     }

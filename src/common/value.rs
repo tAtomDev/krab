@@ -56,13 +56,17 @@ impl Value {
             Self::Float(_) => Ok(Type::Float),
             Self::Boolean(_) => Ok(Type::Bool),
             Self::Tuple(values) => {
-                let tys = values.clone().into_iter().filter_map(|v| v.ty().ok()).collect::<Vec<_>>();
+                let tys = values
+                    .clone()
+                    .into_iter()
+                    .filter_map(|v| v.ty().ok())
+                    .collect::<Vec<_>>();
                 if tys.len() != values.len() {
                     return Err("invalid tuple types");
                 }
 
                 Ok(Type::Tuple(tys))
-            },
+            }
             Self::String(_) => Ok(Type::String),
         }
     }
@@ -88,9 +92,9 @@ impl Value {
         }
     }
 
-    pub fn as_string(self) -> String {
+    pub fn as_string(&self) -> String {
         match self {
-            Value::String(string) => string,
+            Value::String(string) => string.clone(),
             _ => self.to_string(),
         }
     }
