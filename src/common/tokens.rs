@@ -129,6 +129,7 @@ impl Operator {
                 | Operator::Multiply
                 | Operator::Divide
                 | Operator::Modulo
+                | Operator::Power
         )
     }
 
@@ -136,28 +137,17 @@ impl Operator {
         matches!(self, Operator::Add | Operator::Subtract | Operator::Not)
     }
 
-    pub const fn is_logical(self) -> bool {
-        matches!(self, Operator::And | Operator::Or)
-    }
-
-    pub const fn logical_precedence(self) -> u8 {
-        match self {
-            Operator::And => 3,
-            Operator::Or => 2,
-            _ => 0,
-        }
-    }
-
     pub const fn precedence(self) -> u8 {
         match self {
-            Operator::Add | Operator::Subtract => 1,
-            Operator::Multiply | Operator::Divide | Operator::Modulo => 2,
+            Operator::Or => 1,
+            Operator::And => 2,
             Operator::Equal | Operator::NotEqual => 3,
-            Operator::Less
-            | Operator::LessOrEqual
-            | Operator::Greater
-            | Operator::GreaterOrEqual => 4,
-            _ => 5,
+            Operator::Less | Operator::LessOrEqual | Operator::Greater | Operator::GreaterOrEqual => 4,
+            Operator::Add | Operator::Subtract => 5,
+            Operator::Multiply | Operator::Divide | Operator::Modulo => 6,
+            Operator::Power => 7,
+            Operator::Not => 8,
+            _ => todo!()
         }
     }
 
@@ -165,7 +155,7 @@ impl Operator {
         if self.is_binary() {
             Associativity::Left
         } else {
-            Associativity::None
+            Associativity::Right
         }
     }
 }
@@ -173,7 +163,7 @@ impl Operator {
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum Associativity {
     Left,
-    None,
+    Right,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
@@ -184,11 +174,11 @@ pub enum Punctuation {
     CloseBrace,       // }
     OpenBrackets,     // [
     CloseBrackets,    // ]
-    Semicolon,        //;
-    Comma,            //,
-    Colon,            //:
-    Dot,              //.
-    QuestionMark,     //?
+    Semicolon,        // ;
+    Comma,            // ,
+    Colon,            // :
+    Dot,              // .
+    QuestionMark,     // ?
 }
 
 impl Display for Punctuation {

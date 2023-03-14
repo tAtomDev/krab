@@ -345,11 +345,7 @@ impl Parser {
                 _ => return Err(ParserError::ExpectedOperatorButFound(operator_token)),
             };
 
-            let operator_precedence = if operator.is_logical() {
-                operator.logical_precedence()
-            } else {
-                operator.precedence()
-            };
+            let operator_precedence = operator.precedence();
 
             if operator_precedence < min_precedence {
                 break;
@@ -386,19 +382,13 @@ impl Parser {
                 expr
             }
             Token::Operator(operator) => {
-                if !operator.is_unary() {
+                if operator.is_unary() {
+                    let expression = self.parse_expression()?;
+                    Expression::Unary(operator, Box::new(expression))
+                } else {
                     return Err(ParserError::TryingToParseUnexpectedOperator(operator));
                 }
-
-                let expression = self.parse_primary()?;
-                if let Expression::Unary(op, _) = &expression {
-                    if op != &Operator::Not {
-                        return Err(ParserError::InvalidUnaryExpression);
-                    }
-                }
-
-                Expression::Unary(operator, Box::new(expression))
-            }
+            }    
             _ => return Err(ParserError::TryingToParseUnexpectedToken(token)),
         };
 
