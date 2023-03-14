@@ -489,4 +489,83 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn basic_if_else() {
+        let code = r#"
+            if true {
+                1
+            } else {
+                2
+            }
+        "#;
+
+        let program = Parser::new(Lexer::new(code).lex().unwrap())
+            .parse()
+            .unwrap();
+        assert_eq!(
+            program,
+            vec![Node::Expression(Expression::If {
+                condition: Box::new(Expression::Literal(Literal::Boolean(true))),
+                body: Box::new(Expression::Body(vec![Node::Expression(
+                    Expression::Literal(Literal::Integer(1))
+                )])),
+                else_branch: Some(Box::new(Expression::Body(vec![Node::Expression(
+                    Expression::Literal(Literal::Integer(2))
+                )]))),
+            })]
+        )
+    }
+
+    #[test]
+    fn basic_while_loop() {
+        let code = r#"
+            let x = 0;
+            while x < 5 {
+                x = x + 1;
+            }
+            x
+        "#;
+
+        let program = Parser::new(Lexer::new(code).lex().unwrap())
+            .parse()
+            .unwrap();
+        assert_eq!(
+            program,
+            vec![
+                Node::Statement(Statement::VariableDeclaration {
+                    name: "x".into(),
+                    value_expression: Box::new(Expression::Literal(Literal::Integer(0))),
+                    is_const: false,
+                }),
+                Node::Expression(Expression::While {
+                    condition: Box::new(Expression::Binary(
+                        Box::new(Expression::Identifier(Identifier {
+                            kind: IdentifierKind::Variable,
+                            name: "x".into()
+                        })),
+                        Operator::Less,
+                        Box::new(Expression::Literal(Literal::Integer(5)))
+                    )),
+                    body: Box::new(Expression::Body(vec![Node::Statement(
+                        Statement::Assignment(
+                            "x".into(),
+                            Box::new(Expression::Binary(
+                                Box::new(Expression::Identifier(Identifier {
+                                    kind: IdentifierKind::Variable,
+                                    name: "x".into()
+                                })),
+                                Operator::Add,
+                                Box::new(Expression::Literal(Literal::Integer(1)))
+                            ))
+                        )
+                    )])),
+                }),
+                Node::Expression(Expression::Identifier(Identifier {
+                    kind: IdentifierKind::Variable,
+                    name: "x".into()
+                }))
+            ]
+        )
+    }
 }
