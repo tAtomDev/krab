@@ -128,7 +128,7 @@ impl Add for Value {
                 let result = match rhs {
                     Self::Integer(rhs) => Self::Integer(v.add(rhs)),
                     Self::String(rhs) => Self::String(format!("{v}{rhs}")),
-                    _ => bail!("invalid type: Integer expected for addition")
+                    _ => bail!("invalid type: Integer expected for addition"),
                 };
 
                 Ok(result)
@@ -137,7 +137,7 @@ impl Add for Value {
                 let result = match rhs {
                     Self::Float(rhs) => Self::Float(v.add(rhs)),
                     Self::String(rhs) => Self::String(format!("{v}{rhs}")),
-                    _ => bail!("invalid type: Float expected for addition")
+                    _ => bail!("invalid type: Float expected for addition"),
                 };
 
                 Ok(result)

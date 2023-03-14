@@ -134,7 +134,7 @@ impl Operator {
     }
 
     pub const fn is_unary(self) -> bool {
-        matches!(self, Operator::Add | Operator::Subtract | Operator::Not)
+        matches!(self, Operator::Subtract | Operator::Not)
     }
 
     pub const fn precedence(self) -> u8 {
@@ -150,7 +150,7 @@ impl Operator {
             Operator::Multiply | Operator::Divide | Operator::Modulo => 6,
             Operator::Power => 7,
             Operator::Not => 8,
-            _ => todo!(),
+            _ => 0,
         }
     }
 

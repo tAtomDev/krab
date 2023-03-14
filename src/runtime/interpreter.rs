@@ -28,6 +28,8 @@ pub enum RuntimeError {
 
     #[error("Runtime Error: expected a valid value")]
     ExpectedAValidValue,
+    #[error("Runtime Error: cannot negate this type")]
+    CannotNegateThisType,
 
     #[error("Runtime Error: variable `{0}` not found in this scope")]
     VariableNotFound(String),
@@ -161,7 +163,7 @@ impl Interpreter {
             Expression::Unary(op, expression) => {
                 let evaluated = self.evaluate_expression(*expression)?.parse_value()?;
                 if op == Operator::Subtract {
-                    EvalResult::Value((-evaluated).unwrap())
+                    EvalResult::Value((-evaluated).map_err(|_| RuntimeError::CannotNegateThisType)?)
                 } else if op == Operator::Not {
                     if let Value::Boolean(bool) = evaluated {
                         EvalResult::Value(Value::Boolean(!bool))
