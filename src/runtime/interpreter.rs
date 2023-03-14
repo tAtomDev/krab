@@ -314,7 +314,11 @@ mod tests {
     fn basic_math() {
         let (mut interpreter, content) =
             _create_interpreter_and_read_file("./examples/basic_math.krab");
-        let evaluated = interpreter.evaluate_source(&content).unwrap().parse_value().unwrap();
+        let evaluated = interpreter
+            .evaluate_source(&content)
+            .unwrap()
+            .parse_value()
+            .unwrap();
 
         assert_eq!(evaluated, Value::Integer(1))
     }
@@ -323,7 +327,11 @@ mod tests {
     fn basic_if() {
         let (mut interpreter, content) =
             _create_interpreter_and_read_file("./examples/basic_if.krab");
-        let evaluated = interpreter.evaluate_source(&content).unwrap().parse_value().unwrap();
+        let evaluated = interpreter
+            .evaluate_source(&content)
+            .unwrap()
+            .parse_value()
+            .unwrap();
 
         assert_eq!(evaluated, Value::String("10".into()))
     }
