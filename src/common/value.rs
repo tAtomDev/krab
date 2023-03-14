@@ -13,7 +13,6 @@ pub enum Value {
     Integer(i32),
     Float(f32),
     Boolean(bool),
-    Tuple(Vec<Value>),
     String(String),
 }
 
@@ -25,14 +24,6 @@ impl Display for Value {
             Self::Float(v) => write!(f, "{:?}", v),
             Self::Boolean(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
-            Self::Tuple(vec) => write!(
-                f,
-                "({})",
-                vec.iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
         }
     }
 }
@@ -51,22 +42,10 @@ impl From<Literal> for Value {
 impl Value {
     pub fn ty(&self) -> Result<Type, &str> {
         match self {
-            Self::Nothing => Ok(Type::Tuple(Vec::new())),
+            Self::Nothing => Err("Nothing is not a valid type"),
             Self::Integer(_) => Ok(Type::Int),
             Self::Float(_) => Ok(Type::Float),
             Self::Boolean(_) => Ok(Type::Bool),
-            Self::Tuple(values) => {
-                let tys = values
-                    .clone()
-                    .into_iter()
-                    .filter_map(|v| v.ty().ok())
-                    .collect::<Vec<_>>();
-                if tys.len() != values.len() {
-                    return Err("invalid tuple types");
-                }
-
-                Ok(Type::Tuple(tys))
-            }
             Self::String(_) => Ok(Type::String),
         }
     }
