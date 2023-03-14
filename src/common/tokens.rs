@@ -142,12 +142,15 @@ impl Operator {
             Operator::Or => 1,
             Operator::And => 2,
             Operator::Equal | Operator::NotEqual => 3,
-            Operator::Less | Operator::LessOrEqual | Operator::Greater | Operator::GreaterOrEqual => 4,
+            Operator::Less
+            | Operator::LessOrEqual
+            | Operator::Greater
+            | Operator::GreaterOrEqual => 4,
             Operator::Add | Operator::Subtract => 5,
             Operator::Multiply | Operator::Divide | Operator::Modulo => 6,
             Operator::Power => 7,
             Operator::Not => 8,
-            _ => todo!()
+            _ => todo!(),
         }
     }
 

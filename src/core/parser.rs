@@ -394,7 +394,7 @@ impl Parser {
                 } else {
                     return Err(ParserError::TryingToParseUnexpectedOperator(operator));
                 }
-            }    
+            }
             _ => return Err(ParserError::TryingToParseUnexpectedToken(token)),
         };
 

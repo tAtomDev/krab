@@ -12,7 +12,7 @@ pub enum LexicalError {
     #[error("invalid identifier at {0}")]
     InvalidIdentifier(usize),
     #[error("invalid or illegal literal value")]
-    InvalidLiteral
+    InvalidLiteral,
 }
 
 pub struct Lexer {
@@ -238,11 +238,15 @@ impl Lexer {
 
         if is_float {
             Ok(Token::Literal(Literal::Float(
-                string.parse::<f32>().map_err(|_| LexicalError::InvalidLiteral)?,
+                string
+                    .parse::<f32>()
+                    .map_err(|_| LexicalError::InvalidLiteral)?,
             )))
         } else {
             Ok(Token::Literal(Literal::Integer(
-                string.parse::<i32>().map_err(|_| LexicalError::InvalidLiteral)?,
+                string
+                    .parse::<i32>()
+                    .map_err(|_| LexicalError::InvalidLiteral)?,
             )))
         }
     }
