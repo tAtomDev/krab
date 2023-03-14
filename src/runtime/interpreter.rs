@@ -26,6 +26,9 @@ pub enum RuntimeError {
     #[error("Runtime Error: invalid operator provided")]
     InvalidOperator,
 
+    #[error("Runtime Error: unknown type")]
+    UnknownType,
+
     #[error("Runtime Error: expected a valid value")]
     ExpectedAValidValue,
     #[error("Runtime Error: cannot negate this type")]
@@ -125,12 +128,17 @@ impl Interpreter {
             Statement::Expression(expression) => self.evaluate_expression(expression)?,
             Statement::VariableDeclaration {
                 is_const,
+                ty,
                 name,
                 value_expression,
             } => {
                 let value = self.evaluate_expression(*value_expression)?.parse_value()?;
+                if ty != value.ty().map_err(|_| RuntimeError::UnknownType)? {
+                    return Err(RuntimeError::CannotReassignDifferentType(name));
+                }
+
                 self.environment
-                    .declare_variable(name, value.clone(), is_const)?;
+                    .declare_variable(name, ty, value.clone(), is_const)?;
 
                 EvalResult::Value(value)
             }

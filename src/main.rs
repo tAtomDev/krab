@@ -71,8 +71,9 @@ fn main() {
                 String::new(),
                 |acc, (name, variable)| {
                     format!(
-                        "{acc}\n{} \"{name}\" = {:?}",
+                        "{acc}\n{} {name}: {} = {:?}",
                         if variable.is_const { "const" } else { "let" },
+                        variable.ty,
                         variable.value
                     )
                 },

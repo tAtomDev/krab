@@ -1,6 +1,6 @@
 use crate::{
     ast::{Expression, Identifier, IdentifierKind, Statement},
-    common::{tokens::*, ControlFlow},
+    common::{tokens::*, ControlFlow, Type, Value},
 };
 
 use thiserror::Error;
@@ -17,10 +17,19 @@ pub enum ParserError {
     InvalidExpression,
     #[error("expected a valid identifier")]
     ExpectedValidIdentifier,
+
     #[error("you must assign a value to the '{0}' variable")]
     MustAssignToVariable(String),
     #[error("expected operator but found {0}")]
     ExpectedOperatorButFound(Token),
+
+    #[error("invalid type")]
+    InvalidType,
+    #[error("this variable's type is unknown, try specifying it with `variable: TYPE = VALUE`")]
+    UnknownType,
+    #[error("trying to assign `{0}` to `{1}`")]
+    IncorrectType(Type, Type),
+
     #[error("missing ')' at the end of the expression")]
     MissingClosingParenthesis,
     #[error("trying to parse unexpected operator: {0}")]
@@ -29,6 +38,7 @@ pub enum ParserError {
     TryingToParseUnexpectedToken(Token),
     #[error("invalid unary expression")]
     InvalidUnaryExpression,
+
     #[error("'{0}' expected")]
     Expected(char),
     #[error("expected {0} but found {1}")]
@@ -238,12 +248,25 @@ impl Parser {
     }
 
     fn parse_variable_declaration(&mut self, is_const: bool) -> Result<Statement, ParserError> {
-        let identifier_token = self.advance_token();
-        let identifier = match identifier_token {
+        let identifier = match self.advance_token() {
             Token::Identifier(identifier) => identifier,
             _ => return Err(ParserError::ExpectedValidIdentifier),
         };
 
+        // Parse explicit type, if present
+        // KEY IDENT: TY = VALUE;
+        // -> let x: int = 0;
+        let explicit_ty = if self.current_token() == &Token::Punctuation(Punctuation::Colon) {
+            self.advance_token();
+            match self.advance_token() {
+                Token::Identifier(type_identifier) => Some(Type::from(type_identifier)),
+                _ => return Err(ParserError::ExpectedValidIdentifier),
+            }
+        } else {
+            None
+        };
+
+        // Expect `=` token
         if self.advance_token() != Token::Operator(Operator::Assignment) {
             return Err(ParserError::MustAssignToVariable(identifier));
         }
@@ -251,10 +274,21 @@ impl Parser {
         let value_expression = self.parse_expression()?;
         self.expect_semicolon()?;
 
+        // Verify implicit and explicit types
+        let ty = match (explicit_ty, try_parse_expression_type(&value_expression)?) {
+            (Some(explicit_ty), Some(implicit_ty)) if explicit_ty != implicit_ty => {
+                return Err(ParserError::IncorrectType(explicit_ty, implicit_ty));
+            }
+            (Some(explicit_ty), _) => explicit_ty,
+            (_, Some(implicit_ty)) => implicit_ty,
+            (_, None) => return Err(ParserError::UnknownType),
+        };
+
         Ok(Statement::VariableDeclaration {
-            is_const,
             name: identifier,
+            ty,
             value_expression: Box::new(value_expression),
+            is_const,
         })
     }
 
@@ -402,6 +436,30 @@ impl Parser {
     }
 }
 
+fn try_parse_expression_type(expression: &Expression) -> Result<Option<Type>, ParserError> {
+    let ty = match &expression {
+        Expression::Literal(literal) => {
+            let v: Value = literal.clone().into();
+            v.ty().map_err(|_| ParserError::InvalidType)?
+        }
+        Expression::Binary(a, op, b) => {
+            let a = try_parse_expression_type(&a)?;
+            let b = try_parse_expression_type(&b)?;
+
+            if !op.is_logical() && a != b {
+                return Ok(None);
+            }
+
+            let ty = a.ok_or(ParserError::InvalidType)?;
+            ty
+        }
+        Expression::Unary(_, v) => return try_parse_expression_type(&v),
+        _ => return Ok(None),
+    };
+
+    Ok(Some(ty))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,6 +480,7 @@ mod tests {
             vec![
                 Node::Statement(Statement::VariableDeclaration {
                     name: "x".into(),
+                    ty: Type::Int,
                     value_expression: Box::new(Expression::Binary(
                         Box::new(Expression::Literal(Literal::Integer(1))),
                         Operator::Add,
@@ -456,6 +515,7 @@ mod tests {
             vec![
                 Node::Statement(Statement::VariableDeclaration {
                     name: "x".into(),
+                    ty: Type::Int,
                     value_expression: Box::new(Expression::Binary(
                         Box::new(Expression::Identifier(Identifier {
                             kind: IdentifierKind::Variable,
@@ -535,6 +595,7 @@ mod tests {
             vec![
                 Node::Statement(Statement::VariableDeclaration {
                     name: "x".into(),
+                    ty: Type::Int,
                     value_expression: Box::new(Expression::Literal(Literal::Integer(0))),
                     is_const: false,
                 }),

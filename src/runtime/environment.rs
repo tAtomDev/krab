@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
-use crate::common::Value;
+use crate::common::{Value, Type};
 
 use super::RuntimeError;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Variable {
+    pub ty: Type,
     pub value: Value,
     pub is_const: bool,
 }
@@ -27,6 +28,7 @@ impl Environment {
     pub fn declare_variable(
         &mut self,
         variable_name: impl Into<String>,
+        ty: Type,
         value: Value,
         is_const: bool,
     ) -> Result<(), RuntimeError> {
@@ -36,7 +38,7 @@ impl Environment {
         }
 
         self.variables
-            .insert(variable_name, Variable { value, is_const });
+            .insert(variable_name, Variable { ty, value, is_const });
 
         Ok(())
     }
@@ -63,7 +65,8 @@ impl Environment {
         }
 
         // Check if variables are of the same type
-        if std::mem::discriminant(&variable.value) != std::mem::discriminant(&value) {
+        let value_ty = value.ty().map_err(|_| RuntimeError::UnknownType)?;
+        if variable.ty != value_ty {
             return Err(RuntimeError::CannotReassignDifferentType(variable_name));
         }
 

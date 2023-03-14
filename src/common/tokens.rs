@@ -137,6 +137,19 @@ impl Operator {
         matches!(self, Operator::Subtract | Operator::Not)
     }
 
+    pub const fn is_logical(self) -> bool {
+        matches!(
+            self,
+            Operator::Equal
+                | Operator::NotEqual
+                | Operator::Not
+                | Operator::Less
+                | Operator::LessOrEqual
+                | Operator::Greater
+                | Operator::GreaterOrEqual
+        )
+    }
+
     pub const fn precedence(self) -> u8 {
         match self {
             Operator::Or => 1,

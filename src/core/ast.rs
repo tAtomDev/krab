@@ -1,6 +1,6 @@
 use crate::common::{
     tokens::{Literal, Operator},
-    ControlFlow,
+    ControlFlow, Type,
 };
 
 pub type Body = Vec<Node>;
@@ -16,6 +16,7 @@ pub enum Node {
 pub enum Statement {
     VariableDeclaration {
         name: String,
+        ty: Type,
         value_expression: Box<Expression>,
         is_const: bool,
     },
