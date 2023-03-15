@@ -3,8 +3,6 @@ use std::{
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
-use anyhow::{bail, Context};
-
 use super::{tokens::Literal, Type};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -80,13 +78,13 @@ impl Value {
 }
 
 impl Neg for Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, String>;
 
     fn neg(self) -> Self::Output {
         match self {
             Self::Integer(v) => Ok(Self::Integer(-v)),
             Self::Float(v) => Ok(Self::Float(-v)),
-            _ => bail!("Cannot negate type: {}", self),
+            _ => Err(format!("Cannot negate type: {}", self)),
         }
     }
 }
@@ -94,7 +92,7 @@ impl Neg for Value {
 macro_rules! impl_value_op {
     ($op:ident, $op_name:ident, $error_msg:expr) => {
         impl $op_name for Value {
-            type Output = anyhow::Result<Value>;
+            type Output = Result<Value, String>;
 
             fn $op(self, rhs: Self) -> Self::Output {
                 if self == Self::Nothing {
@@ -105,20 +103,20 @@ macro_rules! impl_value_op {
                     Self::Integer(v) => {
                         let rhs = rhs
                             .as_integer()
-                            .context(concat!("invalid type: Integer expected for ", $error_msg))?;
+                            .ok_or(concat!("invalid type: Integer expected for", $error_msg))?;
                         Ok(Self::Integer(v.$op(rhs)))
                     }
                     Self::Float(v) => {
                         let rhs = rhs
                             .as_float()
-                            .context(concat!("invalid type: Float expected for ", $error_msg))?;
+                            .ok_or(concat!("invalid type: Type expected for", $error_msg))?;
                         Ok(Self::Float(v.$op(rhs)))
                     }
-                    _ => bail!(concat!(
+                    _ => Err(concat!(
                         "these types cannot be ",
                         stringify!($op),
                         "ed together"
-                    )),
+                    ).to_string()),
                 }
             }
         }
@@ -126,7 +124,7 @@ macro_rules! impl_value_op {
 }
 
 impl Add for Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, String>;
 
     fn add(self, rhs: Self) -> Self::Output {
         if self == Self::Nothing {
@@ -138,7 +136,7 @@ impl Add for Value {
                 let result = match rhs {
                     Self::Integer(rhs) => Self::Integer(v.add(rhs)),
                     Self::String(rhs) => Self::String(format!("{v}{rhs}")),
-                    _ => bail!("invalid type: Integer expected for addition"),
+                    _ => return Err(String::from("invalid type: Integer expected for addition")),
                 };
 
                 Ok(result)
@@ -147,7 +145,7 @@ impl Add for Value {
                 let result = match rhs {
                     Self::Float(rhs) => Self::Float(v.add(rhs)),
                     Self::String(rhs) => Self::String(format!("{v}{rhs}")),
-                    _ => bail!("invalid type: Float expected for addition"),
+                    _ => return Err(String::from("invalid type: Float expected for addition")),
                 };
 
                 Ok(result)
@@ -156,7 +154,7 @@ impl Add for Value {
                 let rhs = rhs.as_string();
                 Ok(Self::String(format!("{v}{rhs}")))
             }
-            _ => bail!("these types cannot be added"),
+            _ => return Err(String::from("these types cannot be added")),
         }
     }
 }
