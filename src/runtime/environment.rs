@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::common::{Type, Value};
+use crate::{
+    common::{Type, Value},
+    core::ast::Expression,
+};
 
 use super::RuntimeError;
 
@@ -11,10 +14,17 @@ pub struct Variable {
     pub is_const: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct Function {
+    pub args: Vec<(Type, String)>,
+    pub body: Box<Expression>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     pub parent: Option<Box<Environment>>,
     pub variables: HashMap<String, Variable>,
+    pub functions: HashMap<String, Function>,
 }
 
 impl Environment {
@@ -22,7 +32,24 @@ impl Environment {
         Self {
             parent,
             variables: HashMap::new(),
+            functions: HashMap::new(),
         }
+    }
+
+    pub fn declare_function(
+        &mut self,
+        function_name: impl Into<String>,
+        args: Vec<(Type, String)>,
+        body: Box<Expression>,
+    ) -> Result<(), RuntimeError> {
+        let name = function_name.into();
+        if self.functions.contains_key(&name) {
+            return Err(RuntimeError::CannotRedeclareFunction(name));
+        }
+
+        self.functions.insert(name, Function { args, body });
+
+        Ok(())
     }
 
     pub fn declare_variable(
@@ -98,5 +125,25 @@ impl Environment {
 
         // Trying to access an variable that was not defined
         Err(RuntimeError::VariableNotFound(variable_name))
+    }
+
+    pub fn get_function(
+        &self,
+        function_name: impl Into<String>,
+    ) -> Result<&Function, RuntimeError> {
+        let function_name = function_name.into();
+
+        // Try to get the variable from this environment
+        if let Some(function) = self.functions.get(&function_name) {
+            return Ok(function);
+        };
+
+        // If nothing was found, try to get the variable from the parent environment
+        if let Some(parent) = &self.parent {
+            return parent.get_function(function_name);
+        }
+
+        // Trying to access an variable that was not defined
+        Err(RuntimeError::FunctionNotFound(function_name))
     }
 }

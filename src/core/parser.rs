@@ -23,6 +23,9 @@ pub enum ParserError {
     #[error("expected operator but found {0}")]
     ExpectedOperatorButFound(Token),
 
+    #[error("invalid function argument. Try something like this: `fn example(x: int)`")]
+    InvalidFunctionArgument,
+
     #[error("invalid type")]
     InvalidType,
     #[error("this variable's type is unknown, try specifying it with `variable: TYPE = VALUE`")]
@@ -171,6 +174,37 @@ impl Parser {
                 self.expect_semicolon()?;
                 Statement::Assignment(identifier, Box::new(expression))
             }
+            Token::Punctuation(Punctuation::OpenParenthesis) => {
+                if self.advance_token() != Token::Punctuation(Punctuation::OpenParenthesis) {
+                    return Err(ParserError::Expected('('));
+                }
+
+                let mut args = vec![];
+
+                loop {
+                    if self.is_at_end() {
+                        return Err(ParserError::Expected(')'));
+                    }
+
+                    if self.current_token() == &Token::Punctuation(Punctuation::CloseParenthesis) {
+                        self.advance_token();
+                        break;
+                    }
+
+                    let expression = match self.parse_statement()? {
+                        Statement::Expression(expression) => expression,
+                        _ => return Err(ParserError::InvalidExpression),
+                    };
+
+                    args.push(Box::new(expression));
+
+                    if self.advance_token() != Token::Punctuation(Punctuation::Comma) {
+                        break;
+                    }
+                }
+
+                Statement::Expression(Expression::Call(identifier, args))
+            }
             _ => {
                 self.return_positions(1);
                 Statement::Expression(self.parse_expression()?)
@@ -242,6 +276,22 @@ impl Parser {
                     ControlFlow::Break,
                     Some(Box::new(expression)),
                 )))
+            }
+            Keyword::Function => {
+                let identifier = match self.advance_token() {
+                    Token::Identifier(identifier) => identifier,
+                    _ => return Err(ParserError::ExpectedValidIdentifier),
+                };
+
+                let args = self.parse_function_args()?;
+
+                let body = self.parse_body()?;
+
+                Ok(Statement::FunctionDeclaration {
+                    name: identifier,
+                    args,
+                    body: Box::new(body),
+                })
             }
             _ => panic!("Keyword {:?} not implemented yet", keyword),
         }
@@ -324,6 +374,50 @@ impl Parser {
         } else {
             Ok(None)
         }
+    }
+
+    fn parse_function_args(&mut self) -> Result<Vec<(Type, String)>, ParserError> {
+        if self.advance_token() != Token::Punctuation(Punctuation::OpenParenthesis) {
+            return Err(ParserError::Expected('('));
+        }
+
+        let mut func_args = vec![];
+
+        loop {
+            if self.is_at_end() {
+                return Err(ParserError::Expected(')'));
+            }
+
+            if self.current_token() == &Token::Punctuation(Punctuation::CloseParenthesis) {
+                self.advance_token();
+                break;
+            }
+
+            let identifier = match self.advance_token() {
+                Token::Identifier(identifier) => identifier,
+                _ => return Err(ParserError::InvalidFunctionArgument),
+            };
+
+            // Skip and check `IDENT:TYPE` Colon
+            if self.advance_token() != Token::Punctuation(Punctuation::Colon) {
+                return Err(ParserError::InvalidFunctionArgument);
+            }
+
+            let type_identifier = match self.advance_token() {
+                Token::Identifier(identifier) => identifier,
+                _ => return Err(ParserError::ExpectedValidIdentifier),
+            };
+
+            let ty = Type::from(type_identifier);
+
+            func_args.push((ty, identifier));
+
+            if self.advance_token() != Token::Punctuation(Punctuation::Comma) {
+                break;
+            }
+        }
+
+        Ok(func_args)
     }
 
     fn parse_body(&mut self) -> Result<Expression, ParserError> {

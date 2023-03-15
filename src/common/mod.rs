@@ -9,4 +9,5 @@ pub use value::*;
 pub enum ControlFlow {
     Continue,
     Break,
+    Return,
 }

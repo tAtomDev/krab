@@ -34,6 +34,11 @@ pub enum RuntimeError {
     #[error("Runtime Error: cannot negate this type")]
     CannotNegateThisType,
 
+    #[error("Runtime Error: function `{0}` not found in this scope")]
+    FunctionNotFound(String),
+    #[error("Runtime Error: cannot redeclare function `{0}`")]
+    CannotRedeclareFunction(String),
+
     #[error("Runtime Error: variable `{0}` not found in this scope")]
     VariableNotFound(String),
     #[error("Runtime Error: cannot redeclare variable `{0}`")]
@@ -149,7 +154,15 @@ impl Interpreter {
 
                 EvalResult::Value(value)
             }
-            Statement::Return(_) => unimplemented!(),
+            Statement::Return(expression) => {
+                let result = self.evaluate_expression(expression)?.parse_value()?;
+                EvalResult::ControlFlow(ControlFlow::Return, Some(result))
+            }
+            Statement::FunctionDeclaration { name, args, body } => {
+                self.environment.declare_function(name, args, body)?;
+
+                EvalResult::Value(Value::Nothing)
+            }
         };
 
         Ok(value)
@@ -248,12 +261,50 @@ impl Interpreter {
                             match flow {
                                 ControlFlow::Break => break,
                                 ControlFlow::Continue => continue,
+                                ControlFlow::Return => {
+                                    return Ok(EvalResult::ControlFlow(
+                                        ControlFlow::Return,
+                                        while_value,
+                                    ))
+                                }
                             }
                         }
                     };
                 }
 
                 EvalResult::Value(while_value.unwrap_or(Value::Nothing))
+            }
+            Expression::Call(name, function_args) => {
+                let mut args = vec![];
+                for arg in function_args {
+                    let value = self.evaluate_expression(*arg)?.parse_value()?;
+                    let ty = value.ty().map_err(|_| RuntimeError::InvalidType)?;
+
+                    args.push((ty, value));
+                }
+
+                // TODO:
+                // Function arguments
+                // Function return type
+                //  ^
+                // / \
+                //  |
+                //  |
+
+                let function = self.environment.get_function(name)?;
+                let result = self.evaluate_expression(*(function.body.clone()))?;
+
+                match result {
+                    EvalResult::Value(value) => EvalResult::Value(value),
+                    EvalResult::ControlFlow(flow, value) => {
+                        println!("{:?}", flow);
+                        if flow != ControlFlow::Return {
+                            todo!();
+                        }
+
+                        EvalResult::Value(value.unwrap_or(Value::Nothing))
+                    }
+                }
             }
         };
 

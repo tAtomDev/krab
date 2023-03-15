@@ -20,6 +20,11 @@ pub enum Statement {
         value_expression: Box<Expression>,
         is_const: bool,
     },
+    FunctionDeclaration {
+        name: String,
+        args: Vec<(Type, String)>,
+        body: Box<Expression>,
+    },
     Assignment(String, Box<Expression>),
     Expression(Expression),
     Return(Expression),
@@ -32,6 +37,7 @@ pub enum Expression {
     Binary(Box<Expression>, Operator, Box<Expression>),
     Unary(Operator, Box<Expression>),
     Body(Body),
+    Call(String, Vec<Box<Expression>>),
     If {
         condition: Box<Expression>,
         body: Box<Expression>,
