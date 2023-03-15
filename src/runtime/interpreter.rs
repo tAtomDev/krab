@@ -1,5 +1,5 @@
 use crate::{
-    common::{tokens::Operator, ControlFlow, Value},
+    common::{tokens::Operator, ControlFlow, Value, Type},
     core::{
         ast::*,
         lexer::{Lexer, LexicalError},
@@ -28,6 +28,10 @@ pub enum RuntimeError {
 
     #[error("Runtime Error: unknown type")]
     UnknownType,
+    #[error("Runtime Error: incorrect argument type: `{0}` expected")]
+    IncorrectArgumentType(Type),
+    #[error("Runtime Error: expected {0} arguments, but {1} were found.")]
+    IncorrectAmountOfArguments(usize, usize),
 
     #[error("Runtime Error: expected a valid value")]
     ExpectedAValidValue,
@@ -38,6 +42,8 @@ pub enum RuntimeError {
     FunctionNotFound(String),
     #[error("Runtime Error: cannot redeclare function `{0}`")]
     CannotRedeclareFunction(String),
+    #[error("Runtime Error: invalid function body")]
+    InvalidFunctionBody,
 
     #[error("Runtime Error: variable `{0}` not found in this scope")]
     VariableNotFound(String),
@@ -98,7 +104,7 @@ impl Interpreter {
                     let result = self.evaluate_statement(statement)?;
                     match &result {
                         EvalResult::Value(_) => EvalResult::Value(Value::Nothing),
-                        EvalResult::ControlFlow(..) => result,
+                        EvalResult::ControlFlow(..) => return Ok(result),
                     }
                 }
                 Node::Expression(expression) => self.evaluate_expression(expression)?,
@@ -291,8 +297,35 @@ impl Interpreter {
                 //  |
                 //  |
 
-                let function = self.environment.get_function(name)?;
-                let result = self.evaluate_expression(*(function.body.clone()))?;
+                let function = self.environment.get_function(name)?.clone();
+                let function_body = *function.body;
+
+                let result = match function_body{
+                    Expression::Body(body) => {
+                        // Provided insufficient/too much args
+                        if function.args.len() != args.len() {
+                            return Err(RuntimeError::IncorrectAmountOfArguments(function.args.len(), args.len()))
+                        }
+
+                        self.upgrade_environment_scope();
+
+                        // Declare function arguments
+                        for (func_arg, arg) in function.args.into_iter().zip(args) {
+                            // Compare argument type
+                            if arg.0 != func_arg.0 {
+                                self.downgrade_environment_scope();
+                                return Err(RuntimeError::IncorrectArgumentType(func_arg.0));
+                            }
+
+                            self.environment.declare_variable(func_arg.1, func_arg.0, arg.1, false)?;
+                        }
+                        let res = self.evaluate(body)?;
+                        self.downgrade_environment_scope();
+        
+                        res
+                    },
+                    _ => return Err(RuntimeError::InvalidFunctionBody)
+                };
 
                 match result {
                     EvalResult::Value(value) => EvalResult::Value(value),
