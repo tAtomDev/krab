@@ -1,7 +1,43 @@
 use std::fmt::Display;
 
+use super::Span;
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Token {
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: Span,
+}
+
+impl Token {
+    pub const EOF: Token = Token {
+        kind: TokenKind::Eof,
+        span: Span::ZERO,
+    };
+
+    pub const fn new(kind: TokenKind, span: Span) -> Token {
+        Token { kind, span }
+    }
+
+    pub fn is_eof(&self) -> bool {
+        self.kind == TokenKind::Eof
+    }
+}
+
+impl PartialEq<TokenKind> for Token {
+    fn eq(&self, other: &TokenKind) -> bool {
+        &self.kind == other
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.kind.fmt(f)
+    }
+}
+
+// Kind
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum TokenKind {
     Keyword(Keyword),
     Literal(Literal),
     Identifier(String),
@@ -11,16 +47,16 @@ pub enum Token {
     Invalid,
 }
 
-impl Display for Token {
+impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Token::Keyword(x) => write!(f, "{x}"),
-            Token::Literal(x) => write!(f, "{x}"),
-            Token::Identifier(x) => write!(f, "{x}"),
-            Token::Operator(x) => write!(f, "{x}"),
-            Token::Punctuation(x) => write!(f, "{x}"),
-            Token::Eof => write!(f, "EOF"),
-            Token::Invalid => write!(f, "InvalidToken"),
+            Self::Keyword(x) => write!(f, "{x}"),
+            Self::Literal(x) => write!(f, "{x}"),
+            Self::Identifier(x) => write!(f, "{x}"),
+            Self::Operator(x) => write!(f, "{x}"),
+            Self::Punctuation(x) => write!(f, "{x}"),
+            Self::Eof => write!(f, "EOF"),
+            Self::Invalid => write!(f, "InvalidToken"),
         }
     }
 }
@@ -73,7 +109,7 @@ impl Display for Keyword {
     }
 }
 
-pub const SEMICOLON_TOKEN: Token = Token::Punctuation(Punctuation::Semicolon);
+pub const SEMICOLON_TOKEN: TokenKind = TokenKind::Punctuation(Punctuation::Semicolon);
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum Operator {

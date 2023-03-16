@@ -112,11 +112,10 @@ macro_rules! impl_value_op {
                             .ok_or(concat!("invalid type: Type expected for", $error_msg))?;
                         Ok(Self::Float(v.$op(rhs)))
                     }
-                    _ => Err(concat!(
-                        "these types cannot be ",
-                        stringify!($op),
-                        "ed together"
-                    ).to_string()),
+                    _ => Err(
+                        concat!("these types cannot be ", stringify!($op), "ed together")
+                            .to_string(),
+                    ),
                 }
             }
         }

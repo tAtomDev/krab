@@ -1,23 +1,28 @@
-use crate::{common::tokens::*, util};
+use crate::{
+    common::{tokens::*, Span},
+    util,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum LexicalError {
     #[error("missing '{0}' at end of string literal at {1}")]
-    MissingAtEndOfStringLiteral(char, usize),
+    MissingAtEndOfStringLiteral(char, Span),
     #[error("invalid floating point literal at {0}")]
-    InvalidFloatLiteral(usize),
+    InvalidFloatLiteral(Span),
     #[error("invalid or unexpected identifier character '{0}' at {1}")]
-    InvalidIdentifierCharacter(char, usize),
+    InvalidIdentifierCharacter(char, Span),
     #[error("invalid identifier at {0}")]
-    InvalidIdentifier(usize),
-    #[error("invalid or illegal literal value")]
-    InvalidLiteral,
+    InvalidIdentifier(Span),
+    #[error("invalid or illegal literal value at {0}")]
+    InvalidLiteral(Span),
 }
 
 pub struct Lexer {
     source: Vec<char>,
     position: usize,
+    char_pos: usize,
+    loc: usize,
     waiting_for_identifier: bool,
 }
 
@@ -26,6 +31,8 @@ impl Lexer {
         Self {
             source: code.into().chars().collect(),
             position: 0,
+            char_pos: 0,
+            loc: 0,
             waiting_for_identifier: false,
         }
     }
@@ -36,22 +43,37 @@ impl Lexer {
         while !self.is_at_end() {
             let token = self.scan_token()?;
 
-            if token == Token::Invalid {
+            if token.kind == TokenKind::Invalid {
                 continue;
             }
 
             tokens.push(token);
         }
 
-        if !tokens.ends_with(&[Token::Eof]) {
-            tokens.push(Token::Eof);
+        if !tokens.ends_with(&[Token::EOF]) {
+            tokens.push(Token::EOF);
         }
 
         Ok(tokens)
     }
 
-    fn advance_char(&mut self) -> char {
+    fn make_span(&self) -> Span {
+        Span::new(self.position, self.position, self.loc)
+    }
+
+    fn advance_pos(&mut self) {
+        if self.current_char() == '\n' {
+            self.char_pos = 0;
+            self.loc += 1;
+        }
+
         self.position += 1;
+        self.char_pos += 1;
+    }
+
+    fn advance_char(&mut self) -> char {
+        self.advance_pos();
+
         *self.source.get(self.position - 1).unwrap()
     }
 
@@ -65,7 +87,8 @@ impl Lexer {
 
     fn check_char_and_advance(&mut self, char: char) -> bool {
         if self.current_char() == char {
-            self.position += 1;
+            self.advance_pos();
+
             return true;
         }
 
@@ -78,8 +101,10 @@ impl Lexer {
 
     fn scan_token(&mut self) -> Result<Token, LexicalError> {
         if self.is_at_end() {
-            return Ok(Token::Eof);
+            return Ok(Token::EOF);
         }
+
+        let start = self.char_pos;
 
         let c = self.advance_char();
 
@@ -93,35 +118,36 @@ impl Lexer {
             return self.scan_token();
         }
 
-        let token = match c {
-            '(' => Token::Punctuation(Punctuation::OpenParenthesis),
-            ')' => Token::Punctuation(Punctuation::CloseParenthesis),
-            '[' => Token::Punctuation(Punctuation::OpenBrackets),
-            ']' => Token::Punctuation(Punctuation::CloseBrackets),
-            '{' => Token::Punctuation(Punctuation::OpenBrace),
-            '}' => Token::Punctuation(Punctuation::CloseBrace),
-            ';' => Token::Punctuation(Punctuation::Semicolon),
-            ':' => Token::Punctuation(Punctuation::Colon),
-            ',' => Token::Punctuation(Punctuation::Comma),
-            '.' => Token::Punctuation(Punctuation::Dot),
-            '?' => Token::Punctuation(Punctuation::QuestionMark),
+        let token_kind = match c {
+            '(' => TokenKind::Punctuation(Punctuation::OpenParenthesis),
+            ')' => TokenKind::Punctuation(Punctuation::CloseParenthesis),
+            '[' => TokenKind::Punctuation(Punctuation::OpenBrackets),
+            ']' => TokenKind::Punctuation(Punctuation::CloseBrackets),
+            '{' => TokenKind::Punctuation(Punctuation::OpenBrace),
+            '}' => TokenKind::Punctuation(Punctuation::CloseBrace),
+            ';' => TokenKind::Punctuation(Punctuation::Semicolon),
+            ':' => TokenKind::Punctuation(Punctuation::Colon),
+            ',' => TokenKind::Punctuation(Punctuation::Comma),
+            '.' => TokenKind::Punctuation(Punctuation::Dot),
+            '?' => TokenKind::Punctuation(Punctuation::QuestionMark),
 
-            '+' => Token::Operator(Operator::Add),
+            '+' => TokenKind::Operator(Operator::Add),
             '-' => {
                 if self.check_char_and_advance('>') {
-                    Token::Operator(Operator::Arrow)
+                    TokenKind::Operator(Operator::Arrow)
                 } else {
-                    Token::Operator(Operator::Subtract)
+                    TokenKind::Operator(Operator::Subtract)
                 }
             }
-            '*' => Token::Operator(Operator::Multiply),
+            '*' => TokenKind::Operator(Operator::Multiply),
             '/' => {
                 if self.check_char_and_advance('/') {
                     // Ignore single-line comments
                     while !self.is_at_end() && self.current_char() != '\n' {
                         self.advance_char();
                     }
-                    Token::Invalid
+
+                    TokenKind::Invalid
                 } else if self.check_char_and_advance('*') {
                     // Ignore multi-line comments
                     let mut comment_level = 1;
@@ -136,63 +162,69 @@ impl Lexer {
                             comment_level += 1;
                         }
                     }
-                    Token::Invalid
+
+                    TokenKind::Invalid
                 } else {
-                    Token::Operator(Operator::Divide)
+                    TokenKind::Operator(Operator::Divide)
                 }
             }
-            '%' => Token::Operator(Operator::Modulo),
-            '^' => Token::Operator(Operator::Power),
+            '%' => TokenKind::Operator(Operator::Modulo),
+            '^' => TokenKind::Operator(Operator::Power),
             '!' => {
                 if self.check_char_and_advance('=') {
-                    Token::Operator(Operator::NotEqual)
+                    TokenKind::Operator(Operator::NotEqual)
                 } else {
-                    Token::Operator(Operator::Not)
+                    TokenKind::Operator(Operator::Not)
                 }
             }
 
             '=' => {
                 if self.check_char_and_advance('=') {
-                    Token::Operator(Operator::Equal)
+                    TokenKind::Operator(Operator::Equal)
                 } else {
-                    Token::Operator(Operator::Assignment)
+                    TokenKind::Operator(Operator::Assignment)
                 }
             }
             '>' => {
                 if self.check_char_and_advance('=') {
-                    Token::Operator(Operator::GreaterOrEqual)
+                    TokenKind::Operator(Operator::GreaterOrEqual)
                 } else {
-                    Token::Operator(Operator::Greater)
+                    TokenKind::Operator(Operator::Greater)
                 }
             }
             '<' => {
                 if self.check_char_and_advance('=') {
-                    Token::Operator(Operator::LessOrEqual)
+                    TokenKind::Operator(Operator::LessOrEqual)
                 } else {
-                    Token::Operator(Operator::Less)
+                    TokenKind::Operator(Operator::Less)
                 }
             }
 
-            c if c == '&' && self.check_char_and_advance('&') => Token::Operator(Operator::And),
-            c if c == '|' && self.check_char_and_advance('|') => Token::Operator(Operator::Or),
+            c if c == '&' && self.check_char_and_advance('&') => TokenKind::Operator(Operator::And),
+            c if c == '|' && self.check_char_and_advance('|') => TokenKind::Operator(Operator::Or),
 
             '"' | '\'' => self.string(c)?,
             c if c.is_ascii_digit() => self.number(c)?,
             c if c.is_alphabetic() || c == '_' => self.keyword_or_identifier(c)?,
-            _ => Token::Invalid,
+            _ => TokenKind::Invalid,
         };
 
-        if let Token::Keyword(keyword) = &token {
-            match *keyword {
+        if let TokenKind::Keyword(keyword) = &token_kind {
+            match keyword {
                 Keyword::Function | Keyword::Let => self.waiting_for_identifier = true,
                 _ => {}
             }
         }
 
+        let end = self.char_pos;
+        let span = Span::new(start, end, self.loc);
+
+        let token = Token::new(token_kind, span);
+
         Ok(token)
     }
 
-    fn string(&mut self, quote: char) -> Result<Token, LexicalError> {
+    fn string(&mut self, quote: char) -> Result<TokenKind, LexicalError> {
         let mut string = String::new();
         let mut failed = true;
 
@@ -209,14 +241,14 @@ impl Lexer {
         if failed {
             return Err(LexicalError::MissingAtEndOfStringLiteral(
                 quote,
-                self.position,
+                self.make_span(),
             ));
         }
 
-        Ok(Token::Literal(Literal::String(string)))
+        Ok(TokenKind::Literal(Literal::String(string)))
     }
 
-    fn number(&mut self, first_number: char) -> Result<Token, LexicalError> {
+    fn number(&mut self, first_number: char) -> Result<TokenKind, LexicalError> {
         let mut string = String::new();
         let mut is_float = false;
 
@@ -225,7 +257,7 @@ impl Lexer {
         while !self.is_at_end() {
             if self.current_char() == '.' {
                 if is_float {
-                    return Err(LexicalError::InvalidFloatLiteral(self.position));
+                    return Err(LexicalError::InvalidFloatLiteral(self.make_span()));
                 }
 
                 is_float = true;
@@ -237,21 +269,21 @@ impl Lexer {
         }
 
         if is_float {
-            Ok(Token::Literal(Literal::Float(
+            Ok(TokenKind::Literal(Literal::Float(
                 string
                     .parse::<f32>()
-                    .map_err(|_| LexicalError::InvalidLiteral)?,
+                    .map_err(|_| LexicalError::InvalidLiteral(self.make_span()))?,
             )))
         } else {
-            Ok(Token::Literal(Literal::Integer(
+            Ok(TokenKind::Literal(Literal::Integer(
                 string
                     .parse::<i32>()
-                    .map_err(|_| LexicalError::InvalidLiteral)?,
+                    .map_err(|_| LexicalError::InvalidLiteral(self.make_span()))?,
             )))
         }
     }
 
-    fn keyword_or_identifier(&mut self, char: char) -> Result<Token, LexicalError> {
+    fn keyword_or_identifier(&mut self, char: char) -> Result<TokenKind, LexicalError> {
         let mut string = String::new();
 
         string.push(char);
@@ -265,27 +297,27 @@ impl Lexer {
             string.push(self.advance_char());
         }
 
-        let token = match string.as_str() {
-            "let" => Token::Keyword(Keyword::Let),
-            "const" => Token::Keyword(Keyword::Const),
-            "if" => Token::Keyword(Keyword::If),
-            "else" => Token::Keyword(Keyword::Else),
-            "while" => Token::Keyword(Keyword::While),
-            "fn" => Token::Keyword(Keyword::Function),
-            "return" => Token::Keyword(Keyword::Return),
-            "break" => Token::Keyword(Keyword::Break),
-            "continue" => Token::Keyword(Keyword::Continue),
+        let token_kind = match string.as_str() {
+            "let" => TokenKind::Keyword(Keyword::Let),
+            "const" => TokenKind::Keyword(Keyword::Const),
+            "if" => TokenKind::Keyword(Keyword::If),
+            "else" => TokenKind::Keyword(Keyword::Else),
+            "while" => TokenKind::Keyword(Keyword::While),
+            "fn" => TokenKind::Keyword(Keyword::Function),
+            "return" => TokenKind::Keyword(Keyword::Return),
+            "break" => TokenKind::Keyword(Keyword::Break),
+            "continue" => TokenKind::Keyword(Keyword::Continue),
 
-            "true" => Token::Literal(Literal::Boolean(true)),
-            "false" => Token::Literal(Literal::Boolean(false)),
+            "true" => TokenKind::Literal(Literal::Boolean(true)),
+            "false" => TokenKind::Literal(Literal::Boolean(false)),
 
             _ => self.identifier(string)?,
         };
 
-        Ok(token)
+        Ok(token_kind)
     }
 
-    fn identifier(&mut self, mut string: String) -> Result<Token, LexicalError> {
+    fn identifier(&mut self, mut string: String) -> Result<TokenKind, LexicalError> {
         while !self.is_at_end() {
             let current_char = self.current_char();
 
@@ -299,7 +331,7 @@ impl Lexer {
             {
                 return Err(LexicalError::InvalidIdentifierCharacter(
                     current_char,
-                    self.position,
+                    self.make_span(),
                 ));
             }
 
@@ -307,10 +339,10 @@ impl Lexer {
         }
 
         if string.is_empty() {
-            return Err(LexicalError::InvalidIdentifier(self.position));
+            return Err(LexicalError::InvalidIdentifier(self.make_span()));
         }
 
-        Ok(Token::Identifier(string))
+        Ok(TokenKind::Identifier(string))
     }
 }
 
@@ -319,7 +351,7 @@ mod tests {
     use super::Keyword::*;
     use super::Operator::*;
     use super::Punctuation::*;
-    use super::Token::*;
+    use super::TokenKind::*;
     use super::*;
 
     #[test]

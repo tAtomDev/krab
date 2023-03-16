@@ -1,6 +1,6 @@
 use crate::{
     ast::{Expression, Identifier, IdentifierKind, Statement},
-    common::{tokens::*, ControlFlow, Type, Value},
+    common::{tokens::*, ControlFlow, Span, Type, Value},
 };
 
 use thiserror::Error;
@@ -9,43 +9,43 @@ use super::ast::{Body, Node};
 
 #[derive(Error, Debug)]
 pub enum ParserError {
-    #[error("expected semicolon ';'")]
-    ExpectedSemicolon,
-    #[error("invalid token {0}")]
-    InvalidToken(Token),
-    #[error("invalid expression")]
-    InvalidExpression,
-    #[error("expected a valid identifier")]
-    ExpectedValidIdentifier,
+    #[error("expected semicolon ';' at {0}")]
+    ExpectedSemicolon(Span),
+    #[error("invalid token {1} at {0}")]
+    InvalidToken(Span, Token),
+    #[error("invalid expression at {0}")]
+    InvalidExpression(Span),
+    #[error("expected a valid identifier at {0}")]
+    ExpectedValidIdentifier(Span),
 
-    #[error("you must assign a value to the '{0}' variable")]
-    MustAssignToVariable(String),
-    #[error("expected operator but found {0}")]
-    ExpectedOperatorButFound(Token),
+    #[error("you must assign a value to the '{1}' variable at {0}")]
+    MustAssignToVariable(Span, String),
+    #[error("expected operator but found {1} at {0}")]
+    ExpectedOperatorButFound(Span, Token),
 
-    #[error("invalid function argument. Try something like this: `fn example(x: int)`")]
-    InvalidFunctionArgument,
+    #[error("invalid function argument at {0}. Try something like this: `fn example(x: int)`")]
+    InvalidFunctionArgument(Span),
 
-    #[error("invalid type")]
-    InvalidType,
-    #[error("this variable's type is unknown, try specifying it with `variable: TYPE = VALUE`")]
-    UnknownType,
-    #[error("trying to assign `{0}` to `{1}`")]
-    IncorrectType(Type, Type),
+    #[error("invalid type at {0}")]
+    InvalidType(Span),
+    #[error("variable's type is unknown at {0}, try specifying it with `variable: TYPE = VALUE`")]
+    UnknownType(Span),
+    #[error("trying to assign `{1}` to `{2}` at {0}")]
+    IncorrectType(Span, Type, Type),
 
-    #[error("missing ')' at the end of the expression")]
-    MissingClosingParenthesis,
-    #[error("trying to parse unexpected operator: {0}")]
-    TryingToParseUnexpectedOperator(Operator),
-    #[error("trying to parse unexpected token: {0}")]
-    TryingToParseUnexpectedToken(Token),
-    #[error("invalid unary expression")]
-    InvalidUnaryExpression,
+    #[error("missing ')' at the end of the expression at {0}")]
+    MissingClosingParenthesis(Span),
+    #[error("trying to parse unexpected operator `{1}` at {0}")]
+    TryingToParseUnexpectedOperator(Span, Operator),
+    #[error("trying to parse unexpected token `{1}` at {0}")]
+    TryingToParseUnexpectedToken(Span, Token),
+    #[error("invalid unary expression at {0}")]
+    InvalidUnaryExpression(Span),
 
-    #[error("'{0}' expected")]
-    Expected(char),
-    #[error("expected {0} but found {1}")]
-    ExpectedButFound(&'static str, String),
+    #[error("'{1}' expected at {0}")]
+    Expected(Span, char),
+    #[error("expected {1} but found {2} at {0}")]
+    ExpectedButFound(Span, &'static str, String),
 }
 
 pub struct Parser {
@@ -74,22 +74,27 @@ impl Parser {
         Ok(program)
     }
 
+    fn span(&self) -> Span {
+        self.current_token().span
+    }
+
     pub fn current_token(&self) -> &Token {
         if self.is_at_end() {
-            &Token::Eof
+            &Token::EOF
         } else {
             self.tokens.get(self.position).unwrap()
         }
     }
 
     pub fn is_at_end(&self) -> bool {
-        let token = self.tokens.get(self.position).unwrap_or(&Token::Eof);
-        *token == Token::Eof
+        let token = self.tokens.get(self.position).unwrap_or(&Token::EOF);
+        token.is_eof()
     }
 
     fn expect_semicolon(&mut self) -> Result<(), ParserError> {
-        if self.advance_token() != Token::Punctuation(Punctuation::Semicolon) {
-            return Err(ParserError::ExpectedSemicolon);
+        let token = self.advance_token();
+        if token != TokenKind::Punctuation(Punctuation::Semicolon) {
+            return Err(ParserError::ExpectedSemicolon(token.span));
         }
 
         Ok(())
@@ -105,12 +110,14 @@ impl Parser {
     }
 
     fn parse_node(&mut self) -> Result<Node, ParserError> {
-        match self.current_token() {
-            Token::Punctuation(Punctuation::Semicolon) => {
+        match self.current_token().kind {
+            TokenKind::Punctuation(Punctuation::Semicolon) => {
                 self.advance_token();
                 Ok(Node::Empty)
             }
-            Token::Punctuation(Punctuation::OpenBrace) => Ok(Node::Expression(self.parse_body()?)),
+            TokenKind::Punctuation(Punctuation::OpenBrace) => {
+                Ok(Node::Expression(self.parse_body()?))
+            }
             _ => {
                 let stmt = self.parse_statement()?;
                 if let Statement::Expression(expr) = stmt {
@@ -128,30 +135,36 @@ impl Parser {
     }
 
     fn parse_expression(&mut self) -> Result<Expression, ParserError> {
-        match self.current_token() {
-            Token::Punctuation(Punctuation::Semicolon) => Err(ParserError::ExpectedButFound(
+        let token = self.current_token().clone();
+        match token.kind {
+            TokenKind::Punctuation(Punctuation::Semicolon) => Err(ParserError::ExpectedButFound(
+                token.span,
                 "a valid expression",
                 ";".into(),
             )),
-            Token::Keyword(_) => {
+            TokenKind::Keyword(_) => {
                 let statement = self.parse_keyword()?;
                 match statement {
                     Statement::Expression(expression) => Ok(expression),
-                    _ => Err(ParserError::InvalidExpression),
+                    _ => Err(ParserError::InvalidExpression(token.span)),
                 }
             }
-            Token::Punctuation(Punctuation::OpenBrace) => self.parse_body(),
+            TokenKind::Punctuation(Punctuation::OpenBrace) => self.parse_body(),
             _ => self.parse_binary(0),
         }
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ParserError> {
-        match self.current_token() {
-            Token::Identifier(_) => self.parse_identifier(),
-            Token::Literal(_) => Ok(Statement::Expression(self.parse_expression()?)),
-            Token::Keyword(_) => self.parse_keyword(),
-            Token::Invalid => Err(ParserError::InvalidToken(self.current_token().clone())),
-            Token::Eof => unreachable!(),
+        let token = self.current_token();
+        match token.kind {
+            TokenKind::Identifier(_) => self.parse_identifier(),
+            TokenKind::Literal(_) => Ok(Statement::Expression(self.parse_expression()?)),
+            TokenKind::Keyword(_) => self.parse_keyword(),
+            TokenKind::Invalid => Err(ParserError::InvalidToken(
+                token.span,
+                self.current_token().clone(),
+            )),
+            TokenKind::Eof => unreachable!(),
             _ => {
                 let expr = self.parse_expression()?;
 
@@ -162,43 +175,46 @@ impl Parser {
 
     fn parse_identifier(&mut self) -> Result<Statement, ParserError> {
         let identifier_token = self.advance_token();
-        let identifier = match identifier_token {
-            Token::Identifier(identifier) => identifier,
-            _ => return Err(ParserError::ExpectedValidIdentifier),
+        let identifier = match identifier_token.kind {
+            TokenKind::Identifier(identifier) => identifier,
+            _ => return Err(ParserError::ExpectedValidIdentifier(identifier_token.span)),
         };
 
-        let statement = match self.current_token() {
-            Token::Operator(Operator::Assignment) => {
+        let statement = match self.current_token().kind {
+            TokenKind::Operator(Operator::Assignment) => {
                 self.advance_token();
                 let expression = self.parse_expression()?;
                 self.expect_semicolon()?;
                 Statement::Assignment(identifier, Box::new(expression))
             }
-            Token::Punctuation(Punctuation::OpenParenthesis) => {
-                if self.advance_token() != Token::Punctuation(Punctuation::OpenParenthesis) {
-                    return Err(ParserError::Expected('('));
+            TokenKind::Punctuation(Punctuation::OpenParenthesis) => {
+                let token = self.advance_token();
+                if token != TokenKind::Punctuation(Punctuation::OpenParenthesis) {
+                    return Err(ParserError::Expected(token.span, '('));
                 }
 
                 let mut args = vec![];
 
                 loop {
                     if self.is_at_end() {
-                        return Err(ParserError::Expected(')'));
+                        return Err(ParserError::Expected(Span::EOF, ')'));
                     }
 
-                    if self.current_token() == &Token::Punctuation(Punctuation::CloseParenthesis) {
+                    if self.current_token()
+                        == &TokenKind::Punctuation(Punctuation::CloseParenthesis)
+                    {
                         self.advance_token();
                         break;
                     }
 
                     let expression = match self.parse_statement()? {
                         Statement::Expression(expression) => expression,
-                        _ => return Err(ParserError::InvalidExpression),
+                        _ => return Err(ParserError::InvalidExpression(self.span())),
                     };
 
                     args.push(Box::new(expression));
 
-                    if self.advance_token() != Token::Punctuation(Punctuation::Comma) {
+                    if self.advance_token() != TokenKind::Punctuation(Punctuation::Comma) {
                         break;
                     }
                 }
@@ -216,8 +232,8 @@ impl Parser {
 
     fn parse_keyword(&mut self) -> Result<Statement, ParserError> {
         let keyword_token = self.advance_token();
-        let keyword = match keyword_token {
-            Token::Keyword(keyword) => keyword,
+        let keyword = match keyword_token.kind {
+            TokenKind::Keyword(keyword) => keyword,
             _ => unreachable!(),
         };
 
@@ -278,9 +294,10 @@ impl Parser {
                 )))
             }
             Keyword::Function => {
-                let identifier = match self.advance_token() {
-                    Token::Identifier(identifier) => identifier,
-                    _ => return Err(ParserError::ExpectedValidIdentifier),
+                let token = self.advance_token();
+                let identifier = match token.kind {
+                    TokenKind::Identifier(identifier) => identifier,
+                    _ => return Err(ParserError::ExpectedValidIdentifier(token.span)),
                 };
 
                 let args = self.parse_function_args()?;
@@ -298,40 +315,51 @@ impl Parser {
     }
 
     fn parse_variable_declaration(&mut self, is_const: bool) -> Result<Statement, ParserError> {
-        let identifier = match self.advance_token() {
-            Token::Identifier(identifier) => identifier,
-            _ => return Err(ParserError::ExpectedValidIdentifier),
+        let token = self.advance_token();
+        let identifier = match token.kind {
+            TokenKind::Identifier(identifier) => identifier,
+            _ => return Err(ParserError::ExpectedValidIdentifier(token.span)),
         };
 
         // Parse explicit type, if present
         // KEY IDENT: TY = VALUE;
         // -> let x: int = 0;
-        let explicit_ty = if self.current_token() == &Token::Punctuation(Punctuation::Colon) {
+        let explicit_ty = if self.current_token() == &TokenKind::Punctuation(Punctuation::Colon) {
             self.advance_token();
-            match self.advance_token() {
-                Token::Identifier(type_identifier) => Some(Type::from(type_identifier)),
-                _ => return Err(ParserError::ExpectedValidIdentifier),
+
+            let token = self.advance_token();
+            match token.kind {
+                TokenKind::Identifier(type_identifier) => Some(Type::from(type_identifier)),
+                _ => return Err(ParserError::ExpectedValidIdentifier(token.span)),
             }
         } else {
             None
         };
 
         // Expect `=` token
-        if self.advance_token() != Token::Operator(Operator::Assignment) {
-            return Err(ParserError::MustAssignToVariable(identifier));
+        let token = self.advance_token();
+        if token != TokenKind::Operator(Operator::Assignment) {
+            return Err(ParserError::MustAssignToVariable(token.span, identifier));
         }
 
         let value_expression = self.parse_expression()?;
         self.expect_semicolon()?;
 
         // Verify implicit and explicit types
-        let ty = match (explicit_ty, try_parse_expression_type(&value_expression)?) {
+        let ty = match (
+            explicit_ty,
+            try_parse_expression_type(self.span(), &value_expression)?,
+        ) {
             (Some(explicit_ty), Some(implicit_ty)) if explicit_ty != implicit_ty => {
-                return Err(ParserError::IncorrectType(explicit_ty, implicit_ty));
+                return Err(ParserError::IncorrectType(
+                    self.span(),
+                    explicit_ty,
+                    implicit_ty,
+                ));
             }
             (Some(explicit_ty), _) => explicit_ty,
             (_, Some(implicit_ty)) => implicit_ty,
-            (_, None) => return Err(ParserError::UnknownType),
+            (_, None) => return Err(ParserError::UnknownType(self.span())),
         };
 
         Ok(Statement::VariableDeclaration {
@@ -357,12 +385,12 @@ impl Parser {
     }
 
     fn parse_else(&mut self) -> Result<Option<Expression>, ParserError> {
-        if self.current_token() == &Token::Keyword(Keyword::Else) {
+        if self.current_token() == &TokenKind::Keyword(Keyword::Else) {
             // Skip the else keywor?/d
             self.advance_token();
 
             // Check for else if's
-            if self.current_token() == &Token::Keyword(Keyword::If) {
+            if self.current_token() == &TokenKind::Keyword(Keyword::If) {
                 self.advance_token();
                 return Ok(Some(self.parse_if()?));
             }
@@ -377,42 +405,47 @@ impl Parser {
     }
 
     fn parse_function_args(&mut self) -> Result<Vec<(Type, String)>, ParserError> {
-        if self.advance_token() != Token::Punctuation(Punctuation::OpenParenthesis) {
-            return Err(ParserError::Expected('('));
+        let token = self.advance_token();
+        if token != TokenKind::Punctuation(Punctuation::OpenParenthesis) {
+            return Err(ParserError::Expected(token.span, '('));
         }
 
         let mut func_args = vec![];
 
         loop {
             if self.is_at_end() {
-                return Err(ParserError::Expected(')'));
+                return Err(ParserError::Expected(Span::EOF, ')'));
             }
 
-            if self.current_token() == &Token::Punctuation(Punctuation::CloseParenthesis) {
+            if self.current_token() == &TokenKind::Punctuation(Punctuation::CloseParenthesis) {
                 self.advance_token();
                 break;
             }
 
-            let identifier = match self.advance_token() {
-                Token::Identifier(identifier) => identifier,
-                _ => return Err(ParserError::InvalidFunctionArgument),
+            let token = self.advance_token();
+            let identifier = match token.kind {
+                TokenKind::Identifier(identifier) => identifier,
+                _ => return Err(ParserError::InvalidFunctionArgument(token.span)),
             };
 
             // Skip and check `IDENT:TYPE` Colon
-            if self.advance_token() != Token::Punctuation(Punctuation::Colon) {
-                return Err(ParserError::InvalidFunctionArgument);
+            let token = self.advance_token();
+            if token != TokenKind::Punctuation(Punctuation::Colon) {
+                return Err(ParserError::InvalidFunctionArgument(token.span));
             }
 
-            let type_identifier = match self.advance_token() {
-                Token::Identifier(identifier) => identifier,
-                _ => return Err(ParserError::ExpectedValidIdentifier),
+            // Parse type identifier
+            let token = self.advance_token();
+            let type_identifier = match token.kind {
+                TokenKind::Identifier(identifier) => identifier,
+                _ => return Err(ParserError::ExpectedValidIdentifier(token.span)),
             };
 
             let ty = Type::from(type_identifier);
 
             func_args.push((ty, identifier));
 
-            if self.advance_token() != Token::Punctuation(Punctuation::Comma) {
+            if self.advance_token() != TokenKind::Punctuation(Punctuation::Comma) {
                 break;
             }
         }
@@ -421,18 +454,19 @@ impl Parser {
     }
 
     fn parse_body(&mut self) -> Result<Expression, ParserError> {
-        if self.advance_token() != Token::Punctuation(Punctuation::OpenBrace) {
-            return Err(ParserError::Expected('{'));
+        let token = self.advance_token();
+        if token != TokenKind::Punctuation(Punctuation::OpenBrace) {
+            return Err(ParserError::Expected(token.span, '{'));
         }
 
         let mut body = vec![];
 
         loop {
             if self.is_at_end() {
-                return Err(ParserError::Expected('}'));
+                return Err(ParserError::Expected(Span::EOF, '}'));
             }
 
-            if self.current_token() == &Token::Punctuation(Punctuation::CloseBrace) {
+            if self.current_token() == &TokenKind::Punctuation(Punctuation::CloseBrace) {
                 self.advance_token();
                 break;
             }
@@ -446,12 +480,14 @@ impl Parser {
     }
 
     fn parse_binary(&mut self, min_precedence: u8) -> Result<Expression, ParserError> {
-        match self.current_token() {
+        let token = self.current_token();
+        match token.kind {
             // Ignore (
-            Token::Punctuation(Punctuation::OpenParenthesis) => {}
+            TokenKind::Punctuation(Punctuation::OpenParenthesis) => {}
 
-            Token::Punctuation(p) => {
+            TokenKind::Punctuation(p) => {
                 return Err(ParserError::ExpectedButFound(
+                    token.span,
                     "a valid binary expression",
                     format!("'{}'", p),
                 ))
@@ -467,10 +503,15 @@ impl Parser {
                 break;
             }
 
-            let operator = match operator_token {
-                Token::Operator(operator) => operator,
-                Token::Eof | Token::Punctuation(_) => break,
-                _ => return Err(ParserError::ExpectedOperatorButFound(operator_token)),
+            let operator = match operator_token.kind {
+                TokenKind::Operator(operator) => operator,
+                TokenKind::Eof | TokenKind::Punctuation(_) => break,
+                _ => {
+                    return Err(ParserError::ExpectedOperatorButFound(
+                        operator_token.span,
+                        operator_token,
+                    ))
+                }
             };
 
             let operator_precedence = operator.precedence();
@@ -495,58 +536,67 @@ impl Parser {
     fn parse_primary(&mut self) -> Result<Expression, ParserError> {
         let token = self.advance_token();
 
-        let expression = match token {
-            Token::Identifier(name) => Expression::Identifier(Identifier {
+        let expression = match token.kind {
+            TokenKind::Identifier(name) => Expression::Identifier(Identifier {
                 kind: IdentifierKind::Variable,
                 name,
             }),
-            Token::Literal(literal) => Expression::Literal(literal),
-            Token::Punctuation(Punctuation::OpenParenthesis) => {
+            TokenKind::Literal(literal) => Expression::Literal(literal),
+            TokenKind::Punctuation(Punctuation::OpenParenthesis) => {
                 let expr = self.parse_expression()?;
-                if self.advance_token() != Token::Punctuation(Punctuation::CloseParenthesis) {
-                    return Err(ParserError::MissingClosingParenthesis);
+
+                let token = self.advance_token();
+                if token != TokenKind::Punctuation(Punctuation::CloseParenthesis) {
+                    return Err(ParserError::MissingClosingParenthesis(token.span));
                 }
 
                 expr
             }
-            Token::Operator(operator) => {
+            TokenKind::Operator(operator) => {
                 if operator.is_unary() {
-                    if let Token::Operator(op) = self.current_token() {
+                    if let TokenKind::Operator(op) = self.current_token().kind {
                         if op.is_unary() {
-                            return Err(ParserError::InvalidUnaryExpression);
+                            return Err(ParserError::InvalidUnaryExpression(
+                                self.current_token().span,
+                            ));
                         }
                     }
 
                     let expression = self.parse_expression()?;
                     Expression::Unary(operator, Box::new(expression))
                 } else {
-                    return Err(ParserError::TryingToParseUnexpectedOperator(operator));
+                    return Err(ParserError::TryingToParseUnexpectedOperator(
+                        token.span, operator,
+                    ));
                 }
             }
-            _ => return Err(ParserError::TryingToParseUnexpectedToken(token)),
+            _ => return Err(ParserError::TryingToParseUnexpectedToken(token.span, token)),
         };
 
         Ok(expression)
     }
 }
 
-fn try_parse_expression_type(expression: &Expression) -> Result<Option<Type>, ParserError> {
+fn try_parse_expression_type(
+    span: Span,
+    expression: &Expression,
+) -> Result<Option<Type>, ParserError> {
     let ty = match &expression {
         Expression::Literal(literal) => {
             let v: Value = literal.clone().into();
-            v.ty().map_err(|_| ParserError::InvalidType)?
+            v.ty().map_err(|_| ParserError::InvalidType(span))?
         }
         Expression::Binary(a, op, b) => {
-            let a = try_parse_expression_type(a)?;
-            let b = try_parse_expression_type(b)?;
+            let a = try_parse_expression_type(span, a)?;
+            let b = try_parse_expression_type(span, b)?;
 
             if !op.is_logical() && a != b {
                 return Ok(None);
             }
 
-            a.ok_or(ParserError::InvalidType)?
+            a.ok_or(ParserError::InvalidType(span))?
         }
-        Expression::Unary(_, v) => return try_parse_expression_type(v),
+        Expression::Unary(_, v) => return try_parse_expression_type(span, v),
         _ => return Ok(None),
     };
 

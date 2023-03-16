@@ -1,5 +1,5 @@
 use crate::{
-    common::{tokens::Operator, ControlFlow, Value, Type},
+    common::{tokens::Operator, ControlFlow, Type, Value},
     core::{
         ast::*,
         lexer::{Lexer, LexicalError},
@@ -300,11 +300,14 @@ impl Interpreter {
                 let function = self.environment.get_function(name)?.clone();
                 let function_body = *function.body;
 
-                let result = match function_body{
+                let result = match function_body {
                     Expression::Body(body) => {
                         // Provided insufficient/too much args
                         if function.args.len() != args.len() {
-                            return Err(RuntimeError::IncorrectAmountOfArguments(function.args.len(), args.len()))
+                            return Err(RuntimeError::IncorrectAmountOfArguments(
+                                function.args.len(),
+                                args.len(),
+                            ));
                         }
 
                         self.upgrade_environment_scope();
@@ -317,14 +320,15 @@ impl Interpreter {
                                 return Err(RuntimeError::IncorrectArgumentType(func_arg.0));
                             }
 
-                            self.environment.declare_variable(func_arg.1, func_arg.0, arg.1, false)?;
+                            self.environment
+                                .declare_variable(func_arg.1, func_arg.0, arg.1, false)?;
                         }
                         let res = self.evaluate(body)?;
                         self.downgrade_environment_scope();
-        
+
                         res
-                    },
-                    _ => return Err(RuntimeError::InvalidFunctionBody)
+                    }
+                    _ => return Err(RuntimeError::InvalidFunctionBody),
                 };
 
                 match result {
