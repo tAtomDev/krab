@@ -23,16 +23,19 @@ pub struct Lexer {
     position: usize,
     char_pos: usize,
     loc: usize,
+    current_span_loc: usize,
     waiting_for_identifier: bool,
 }
 
 impl Lexer {
     pub fn new(code: impl Into<String>) -> Self {
+        let code = code.into();
         Self {
-            source: code.into().chars().collect(),
+            source: code.chars().collect(),
             position: 0,
             char_pos: 0,
             loc: 0,
+            current_span_loc: 0,
             waiting_for_identifier: false,
         }
     }
@@ -58,7 +61,7 @@ impl Lexer {
     }
 
     fn make_span(&self) -> Span {
-        Span::new(self.position, self.position, self.loc)
+        Span::new(self.char_pos, self.char_pos, self.current_span_loc)
     }
 
     fn advance_pos(&mut self) {
@@ -105,6 +108,9 @@ impl Lexer {
         }
 
         let start = self.char_pos;
+        let loc = self.loc;
+
+        self.current_span_loc = loc;
 
         let c = self.advance_char();
 
@@ -217,7 +223,7 @@ impl Lexer {
         }
 
         let end = self.char_pos;
-        let span = Span::new(start, end, self.loc);
+        let span = Span::new(start, end, loc);
 
         let token = Token::new(token_kind, span);
 
