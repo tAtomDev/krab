@@ -34,7 +34,7 @@ impl Lexer {
             source: code.chars().collect(),
             position: 0,
             char_pos: 0,
-            loc: 0,
+            loc: 1,
             current_span_loc: 0,
             waiting_for_identifier: false,
         }
