@@ -17,6 +17,9 @@ pub enum RuntimeError {
     #[error("Parser Error: {0}")]
     ParserError(ParserError),
 
+    #[error("Runtime Error: illegal control flow syntax")]
+    IllegalControlFlowStatement,
+
     #[error("Runtime Error: invalid type arithmetic")]
     InvalidType,
     #[error("Runtime Error: expected a boolean")]
@@ -104,7 +107,14 @@ impl Interpreter {
                     let result = self.evaluate_statement(statement)?;
                     match &result {
                         EvalResult::Value(_) => EvalResult::Value(Value::Nothing),
-                        EvalResult::ControlFlow(..) => return Ok(result),
+                        EvalResult::ControlFlow(..) => {
+                            let not_within_a_block = self.environment.parent.is_none();
+                            if not_within_a_block {
+                                return Err(RuntimeError::IllegalControlFlowStatement);
+                            }
+
+                            return Ok(result);
+                        },
                     }
                 }
                 Node::Expression(expression) => self.evaluate_expression(expression)?,
@@ -202,10 +212,6 @@ impl Interpreter {
                 }
             }
             Expression::Identifier(identifier) => {
-                if identifier.kind == IdentifierKind::Function {
-                    panic!("Functions are not yet implemented");
-                }
-
                 EvalResult::Value(
                     self.environment
                         .get_variable(&identifier.name)?
@@ -334,9 +340,8 @@ impl Interpreter {
                 match result {
                     EvalResult::Value(value) => EvalResult::Value(value),
                     EvalResult::ControlFlow(flow, value) => {
-                        println!("{:?}", flow);
                         if flow != ControlFlow::Return {
-                            todo!();
+                            return Err(RuntimeError::IllegalControlFlowStatement);
                         }
 
                         EvalResult::Value(value.unwrap_or(Value::Nothing))
