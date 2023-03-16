@@ -25,6 +25,7 @@ pub struct Environment {
     pub parent: Option<Box<Environment>>,
     pub variables: HashMap<String, Variable>,
     pub functions: HashMap<String, Function>,
+    native_functions: HashMap<String, fn(Vec<Value>) -> Option<Value>>
 }
 
 impl Environment {
@@ -33,6 +34,7 @@ impl Environment {
             parent,
             variables: HashMap::new(),
             functions: HashMap::new(),
+            native_functions: HashMap::new(),
         }
     }
 
@@ -47,9 +49,39 @@ impl Environment {
             return Err(RuntimeError::CannotRedeclareFunction(name));
         }
 
+        if self.native_functions.contains_key(&name) {
+            return Err(RuntimeError::CannotRedeclareFunction(name));
+        }
+
         self.functions.insert(name, Function { args, body });
 
         Ok(())
+    }
+
+    pub fn register_native_function(
+        &mut self,
+        name: impl Into<String>,
+        function: fn(Vec<Value>) -> Option<Value>,
+    ) -> Result<(), RuntimeError> {
+        let name = name.into();
+        if self.functions.contains_key(&name) {
+            return Err(RuntimeError::CannotRedeclareFunction(name));
+        }
+
+        if self.native_functions.contains_key(&name) {
+            return Err(RuntimeError::CannotRedeclareFunction(name));
+        }
+
+        self.native_functions.insert(name, function);
+
+        Ok(())
+    }
+
+    pub fn get_native_function(
+        &self,
+        function_name: impl Into<String>,
+    ) -> Option<fn(Vec<Value>) -> Option<Value>> {
+        self.native_functions.get(&function_name.into()).cloned()
     }
 
     pub fn declare_variable(

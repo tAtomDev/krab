@@ -17,11 +17,8 @@ pub enum Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Nothing => write!(f, "()"),
-            Self::Integer(v) => write!(f, "{}", v),
-            Self::Float(v) => write!(f, "{:?}", v),
-            Self::Boolean(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
+            _ => write!(f, "\"{}\"", self.stringify())
         }
     }
 }
@@ -38,6 +35,16 @@ impl From<Literal> for Value {
 }
 
 impl Value {
+    pub fn stringify(&self) -> String {
+        match self {
+            Self::Nothing => format!("()"),
+            Self::Integer(v) => format!("{}", v),
+            Self::Float(v) => format!("{:?}", v),
+            Self::Boolean(v) => format!("{}", v),
+            Self::String(v) => format!("{}", v),
+        }
+    }
+
     pub fn ty(&self) -> Result<Type, &str> {
         match self {
             Self::Nothing => Err("Nothing is not a valid type"),

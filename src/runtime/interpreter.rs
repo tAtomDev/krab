@@ -303,6 +303,13 @@ impl Interpreter {
                 //  |
                 //  |
 
+                if let Some(function) = self.environment.get_native_function(name.clone()) {
+                    let args = args.into_iter().map(|a| a.1).collect();
+                    let value = function(args);
+
+                    return Ok(EvalResult::Value(value.unwrap_or(Value::Nothing)));
+                }
+
                 let function = self.environment.get_function(name)?.clone();
                 let function_body = *function.body;
 
