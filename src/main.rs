@@ -18,7 +18,7 @@ fn main() {
     print!("{}", "".normal().clear());
     println!(
         "{}\n{}",
-        " - Krab 0.1 REPL".green(),
+        "- Krab 0.1 REPL".green().bold(),
         "Type 'exit' to leave or 'clear' to clear the terminal".green()
     );
 
