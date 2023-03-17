@@ -1,4 +1,5 @@
 # Krab
+![Krab Icon](./krab.png?raw=true "Krab Icon")
 
 Krab is a simple and minimalistic interpreted programming language written in Rust. It has almost no functionality and it is not meant to be used for any serious purpose. It was created as a fun experiment to see how compact and simple a programming language can be.
 
