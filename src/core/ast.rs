@@ -58,6 +58,5 @@ pub struct Identifier {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum IdentifierKind {
-    Function,
     Variable,
 }

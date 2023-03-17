@@ -24,12 +24,19 @@ fn main() {
 
     let mut interpreter = Interpreter::new();
 
-    interpreter.environment.register_native_function("print", |args| {
-        let content = args.into_iter().map(|a| a.stringify()).collect::<Vec<_>>().join(" ");
-        println!("{content}");
+    interpreter
+        .environment
+        .register_native_function("print", |args| {
+            let content = args
+                .into_iter()
+                .map(|a| a.stringify())
+                .collect::<Vec<_>>()
+                .join(" ");
+            println!("{content}");
 
-        None
-    }).unwrap();
+            None
+        })
+        .unwrap();
 
     let mut buffer = String::with_capacity(2048);
     loop {

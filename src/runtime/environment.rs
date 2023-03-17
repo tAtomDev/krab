@@ -25,7 +25,7 @@ pub struct Environment {
     pub parent: Option<Box<Environment>>,
     pub variables: HashMap<String, Variable>,
     pub functions: HashMap<String, Function>,
-    native_functions: HashMap<String, fn(Vec<Value>) -> Option<Value>>
+    native_functions: HashMap<String, fn(Vec<Value>) -> Option<Value>>,
 }
 
 impl Environment {

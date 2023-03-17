@@ -35,18 +35,6 @@ impl From<String> for Type {
     }
 }
 
-impl Type {
-    pub fn identifier(&self) -> String {
-        match self {
-            Self::Int => "int".to_string(),
-            Self::Float => "float".to_string(),
-            Self::Bool => "bool".to_string(),
-            Self::String => "string".to_string(),
-            Self::Custom(string) => string.clone(),
-        }
-    }
-}
-
 impl PartialEq<Value> for Type {
     fn eq(&self, other: &Value) -> bool {
         match (self, other) {

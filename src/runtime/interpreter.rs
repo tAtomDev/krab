@@ -114,7 +114,7 @@ impl Interpreter {
                             }
 
                             return Ok(result);
-                        },
+                        }
                     }
                 }
                 Node::Expression(expression) => self.evaluate_expression(expression)?,
@@ -211,14 +211,12 @@ impl Interpreter {
                     EvalResult::Value(evaluated)
                 }
             }
-            Expression::Identifier(identifier) => {
-                EvalResult::Value(
-                    self.environment
-                        .get_variable(&identifier.name)?
-                        .value
-                        .clone(),
-                )
-            }
+            Expression::Identifier(identifier) => EvalResult::Value(
+                self.environment
+                    .get_variable(&identifier.name)?
+                    .value
+                    .clone(),
+            ),
             Expression::If {
                 condition,
                 body,
