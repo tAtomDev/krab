@@ -2,6 +2,7 @@ mod common;
 mod core;
 mod runtime;
 mod util;
+use colored::Colorize;
 
 use std::{
     fs::File,
@@ -14,9 +15,11 @@ use lexer::*;
 use parser::*;
 
 fn main() {
-    print!("\x1B[2J\x1B[1;1H");
+    print!("{}", "".normal().clear());
     println!(
-        "\x1b[32m- Krab 0.1 REPL\nType 'exit' to leave or 'clear' to clear the terminal.\x1b[0m"
+        "{}\n{}",
+        " - Krab 0.1 REPL".green(),
+        "Type 'exit' to leave or 'clear' to clear the terminal".green()
     );
 
     let mut interpreter = Interpreter::new();
@@ -31,7 +34,7 @@ fn main() {
     let mut buffer = String::with_capacity(2048);
     loop {
         buffer.clear();
-        print!("\x1b[0m> \x1b[33m");
+        print!("{} ", ">".bright_white().bold());
         io::stdout().flush().unwrap();
 
         match io::stdin().read_line(&mut buffer) {
@@ -46,11 +49,9 @@ fn main() {
             break;
         }
 
-        print!("\x1b[0m");
         io::stdout().flush().unwrap();
 
         if buffer == "clear" {
-            print!("\x1B[2J\x1B[1;1H");
             continue;
         }
 
@@ -86,7 +87,7 @@ fn main() {
                 },
             );
 
-            println!("\x1b[36m{}\x1b[0m", variables.trim());
+            println!("{}", variables.trim().cyan());
             continue;
         }
 
@@ -106,7 +107,7 @@ fn main() {
         let value = match interpreter.evaluate_source(&buffer) {
             Ok(v) => v.parse_value(),
             Err(e) => {
-                eprintln!("\x1b[31m{}", e);
+                eprintln!("{}", e.to_string().red());
                 continue;
             }
         };
@@ -114,15 +115,15 @@ fn main() {
         let value = match value {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("\x1b[31m{}", e);
+                eprintln!("{}", e.to_string().red());
                 continue;
             }
         };
 
         if value != Value::Nothing {
-            println!("{}", value);
+            println!("{}", value.to_string().yellow());
         }
     }
 
-    println!("\x1b[0mREPL EXITED");
+    println!("REPL EXITED");
 }

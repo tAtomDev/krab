@@ -18,7 +18,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::String(v) => write!(f, "\"{}\"", v),
-            _ => write!(f, "\"{}\"", self.stringify())
+            _ => write!(f, "{}", self.stringify())
         }
     }
 }
