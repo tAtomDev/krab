@@ -2,6 +2,7 @@ use crate::{
     common::{tokens::*, Span},
     util,
 };
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]

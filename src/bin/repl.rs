@@ -1,18 +1,11 @@
-mod common;
-mod core;
-mod runtime;
-mod util;
 use colored::Colorize;
+
+use krab::prelude::*;
 
 use std::{
     fs::File,
     io::{self, BufReader, Read, Write},
 };
-
-use crate::{common::Value, core::*, runtime::Interpreter};
-
-use lexer::*;
-use parser::*;
 
 fn main() {
     print!("{}", "".normal().clear());
