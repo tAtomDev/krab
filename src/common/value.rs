@@ -37,11 +37,11 @@ impl From<Literal> for Value {
 impl Value {
     pub fn stringify(&self) -> String {
         match self {
-            Self::Nothing => format!("()"),
+            Self::Nothing => "()".to_string(),
             Self::Integer(v) => format!("{}", v),
             Self::Float(v) => format!("{:?}", v),
-            Self::Boolean(v) => format!("{}", v),
-            Self::String(v) => format!("{}", v),
+            Self::Boolean(v) => v.to_string(),
+            Self::String(v) => v.to_string(),
         }
     }
 
@@ -160,7 +160,7 @@ impl Add for Value {
                 let rhs = rhs.as_string();
                 Ok(Self::String(format!("{v}{rhs}")))
             }
-            _ => return Err(String::from("these types cannot be added")),
+            _ => Err(String::from("these types cannot be added")),
         }
     }
 }

@@ -37,12 +37,12 @@ impl From<String> for Type {
 
 impl PartialEq<Value> for Type {
     fn eq(&self, other: &Value) -> bool {
-        match (self, other) {
-            (Self::Int, Value::Integer(_)) => true,
-            (Self::Float, Value::Float(_)) => true,
-            (Self::Bool, Value::Boolean(_)) => true,
-            (Self::String, Value::String(_)) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (Self::Int, Value::Integer(_))
+                | (Self::Float, Value::Float(_))
+                | (Self::Bool, Value::Boolean(_))
+                | (Self::String, Value::String(_))
+        )
     }
 }

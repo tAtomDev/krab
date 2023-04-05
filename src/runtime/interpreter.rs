@@ -77,11 +77,17 @@ pub struct Interpreter {
     pub environment: Environment,
 }
 
-impl Interpreter {
-    pub fn new() -> Self {
+impl Default for Interpreter {
+    fn default() -> Self {
         Self {
             environment: Environment::new(None),
         }
+    }
+}
+
+impl Interpreter {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn evaluate_source(&mut self, src: &str) -> Result<EvalResult, RuntimeError> {

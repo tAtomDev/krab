@@ -20,12 +20,14 @@ pub struct Function {
     pub body: Box<Expression>,
 }
 
+type NativeFunction = fn(Vec<Value>) -> Option<Value>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     pub parent: Option<Box<Environment>>,
     pub variables: HashMap<String, Variable>,
     pub functions: HashMap<String, Function>,
-    native_functions: HashMap<String, fn(Vec<Value>) -> Option<Value>>,
+    native_functions: HashMap<String, NativeFunction>,
 }
 
 impl Environment {
@@ -61,7 +63,7 @@ impl Environment {
     pub fn register_native_function(
         &mut self,
         name: impl Into<String>,
-        function: fn(Vec<Value>) -> Option<Value>,
+        function: NativeFunction,
     ) -> Result<(), RuntimeError> {
         let name = name.into();
         if self.functions.contains_key(&name) {
@@ -77,10 +79,7 @@ impl Environment {
         Ok(())
     }
 
-    pub fn get_native_function(
-        &self,
-        function_name: impl Into<String>,
-    ) -> Option<fn(Vec<Value>) -> Option<Value>> {
+    pub fn get_native_function(&self, function_name: impl Into<String>) -> Option<NativeFunction> {
         self.native_functions.get(&function_name.into()).cloned()
     }
 
