@@ -79,8 +79,22 @@ pub struct Interpreter {
 
 impl Default for Interpreter {
     fn default() -> Self {
+        let mut environment = Environment::new(None);
+
+        environment.register_native_function("print", |_env, args| {
+            let content = args
+                .into_iter()
+                .map(|a| a.stringify())
+                .collect::<Vec<_>>()
+                .join(" ");
+            println!("{content}");
+
+            None
+        })
+        .unwrap();
+
         Self {
-            environment: Environment::new(None),
+            environment
         }
     }
 }
@@ -309,7 +323,7 @@ impl Interpreter {
 
                 if let Some(function) = self.environment.get_native_function(name.clone()) {
                     let args = args.into_iter().map(|a| a.1).collect();
-                    let value = function(args);
+                    let value = function(&mut self.environment, args);
 
                     return Ok(EvalResult::Value(value.unwrap_or(Value::Nothing)));
                 }

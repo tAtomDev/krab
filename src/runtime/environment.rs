@@ -20,9 +20,9 @@ pub struct Function {
     pub body: Box<Expression>,
 }
 
-type NativeFunction = fn(Vec<Value>) -> Option<Value>;
+type NativeFunction = fn(&mut Environment, Vec<Value>) -> Option<Value>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Environment {
     pub parent: Option<Box<Environment>>,
     pub variables: HashMap<String, Variable>,
