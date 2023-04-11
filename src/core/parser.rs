@@ -289,23 +289,7 @@ impl Parser {
                     Some(Box::new(expression)),
                 )))
             }
-            Keyword::Function => {
-                let token = self.advance_token();
-                let identifier = match token.kind {
-                    TokenKind::Identifier(identifier) => identifier,
-                    _ => return Err(ParserError::ExpectedValidIdentifier(token.span)),
-                };
-
-                let args = self.parse_function_args()?;
-
-                let body = self.parse_body()?;
-
-                Ok(Statement::FunctionDeclaration {
-                    name: identifier,
-                    args,
-                    body: Box::new(body),
-                })
-            }
+            Keyword::Function => self.parse_function(),
             _ => panic!("Keyword {:?} not implemented yet", keyword),
         }
     }
@@ -363,6 +347,24 @@ impl Parser {
             ty,
             value_expression: Box::new(value_expression),
             is_const,
+        })
+    }
+
+    fn parse_function(&mut self) -> Result<Statement, ParserError> {
+        let token = self.advance_token();
+        let identifier = match token.kind {
+            TokenKind::Identifier(identifier) => identifier,
+            _ => return Err(ParserError::ExpectedValidIdentifier(token.span)),
+        };
+
+        let args = self.parse_function_args()?;
+
+        let body = self.parse_body()?;
+
+        Ok(Statement::FunctionDeclaration {
+            name: identifier,
+            args,
+            body: Box::new(body),
         })
     }
 
@@ -533,10 +535,44 @@ impl Parser {
         let token = self.advance_token();
 
         let expression = match token.kind {
-            TokenKind::Identifier(name) => Expression::Identifier(Identifier {
-                kind: IdentifierKind::Variable,
-                name,
-            }),
+            TokenKind::Identifier(name) => {
+                let token = self.advance_token();
+                if token != TokenKind::Punctuation(Punctuation::OpenParenthesis) {
+                    self.return_positions(1);
+                    return Ok(Expression::Identifier(Identifier {
+                        kind: IdentifierKind::Variable,
+                        name,
+                    }));
+                }
+
+                let mut args = vec![];
+
+                loop {
+                    if self.is_at_end() {
+                        return Err(ParserError::Expected(Span::EOF, ')'));
+                    }
+
+                    if self.current_token()
+                        == &TokenKind::Punctuation(Punctuation::CloseParenthesis)
+                    {
+                        self.advance_token();
+                        break;
+                    }
+
+                    let expression = match self.parse_statement()? {
+                        Statement::Expression(expression) => expression,
+                        _ => return Err(ParserError::InvalidExpression(self.span())),
+                    };
+
+                    args.push(Box::new(expression));
+
+                    if self.advance_token() != TokenKind::Punctuation(Punctuation::Comma) {
+                        break;
+                    }
+                }
+
+                Expression::Call(name, args)
+            }
             TokenKind::Literal(literal) => Expression::Literal(literal),
             TokenKind::Punctuation(Punctuation::OpenParenthesis) => {
                 let expr = self.parse_expression()?;
