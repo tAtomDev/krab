@@ -81,21 +81,20 @@ impl Default for Interpreter {
     fn default() -> Self {
         let mut environment = Environment::new(None);
 
-        environment.register_native_function("print", |_env, args| {
-            let content = args
-                .into_iter()
-                .map(|a| a.stringify())
-                .collect::<Vec<_>>()
-                .join(" ");
-            println!("{content}");
+        environment
+            .register_native_function("print", |_env, args| {
+                let content = args
+                    .into_iter()
+                    .map(|a| a.stringify())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                println!("{content}");
 
-            None
-        })
-        .unwrap();
+                None
+            })
+            .unwrap();
 
-        Self {
-            environment
-        }
+        Self { environment }
     }
 }
 
@@ -475,5 +474,18 @@ mod tests {
             .unwrap();
 
         assert_eq!(evaluated, Value::Boolean(true))
+    }
+
+    #[test]
+    fn factorial() {
+        let (mut interpreter, content) =
+            _create_interpreter_and_read_file("./examples/factorial.krab");
+        let evaluated = interpreter
+            .evaluate_source(&content)
+            .unwrap()
+            .parse_value()
+            .unwrap();
+
+        assert_eq!(evaluated, Value::Integer(120))
     }
 }

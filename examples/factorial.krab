@@ -1,0 +1,9 @@
+fn factorial(n: int) {
+  if n == 0 || n == 1 {
+    1
+  } else {
+    n * factorial(n - 1)
+  }
+}
+
+factorial(5) // should be 120
