@@ -36,7 +36,10 @@ impl Environment {
             parent: parent.clone(),
             variables: HashMap::new(),
             functions: HashMap::new(),
-            native_functions: parent.and_then(|p| Some(p.native_functions.clone())).unwrap_or_default(),
+            native_functions: parent
+                .as_ref()
+                .and_then(|p| Some(p.native_functions.clone()))
+                .unwrap_or_default(),
         }
     }
 
