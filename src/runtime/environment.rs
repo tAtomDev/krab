@@ -27,16 +27,16 @@ pub struct Environment {
     pub parent: Option<Box<Environment>>,
     pub variables: HashMap<String, Variable>,
     pub functions: HashMap<String, Function>,
-    native_functions: HashMap<String, NativeFunction>,
+    pub native_functions: HashMap<String, NativeFunction>,
 }
 
 impl Environment {
     pub fn new(parent: Option<Box<Environment>>) -> Self {
         Self {
-            parent,
+            parent: parent.clone(),
             variables: HashMap::new(),
             functions: HashMap::new(),
-            native_functions: HashMap::new(),
+            native_functions: parent.and_then(|p| Some(p.native_functions.clone())).unwrap_or_default(),
         }
     }
 
