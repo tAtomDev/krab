@@ -7,8 +7,8 @@ let y = 3.14;
 // Declare a constant
 const z = true;
 
-// Define a function
-fn add(a: int, b: int) {
+// Define a function with a return type
+fn add(a: int, b: int) -> int {
     // Return without semicolon
     a + b 
 }

@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "krab"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "colored",
  "thiserror",

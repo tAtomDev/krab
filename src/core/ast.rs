@@ -23,6 +23,7 @@ pub enum Statement {
     FunctionDeclaration {
         name: String,
         args: Vec<(Type, String)>,
+        return_type: Option<Type>,
         body: Box<Expression>,
     },
     Assignment(String, Box<Expression>),

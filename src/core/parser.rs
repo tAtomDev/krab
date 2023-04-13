@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use thiserror::Error;
 
 use super::ast::*;
@@ -47,6 +49,7 @@ pub enum ParserError {
 pub struct Parser {
     position: usize,
     tokens: Vec<Token>,
+    function_return_type_cache: HashMap<String, Option<Type>>,
 }
 
 impl Parser {
@@ -54,6 +57,7 @@ impl Parser {
         Parser {
             position: 0,
             tokens,
+            function_return_type_cache: HashMap::new(),
         }
     }
 
@@ -289,7 +293,7 @@ impl Parser {
                     Some(Box::new(expression)),
                 )))
             }
-            Keyword::Function => self.parse_function(),
+            Keyword::Function => self.parse_function_declaration(),
             _ => panic!("Keyword {:?} not implemented yet", keyword),
         }
     }
@@ -328,7 +332,11 @@ impl Parser {
         // Verify implicit and explicit types
         let ty = match (
             explicit_ty,
-            try_parse_expression_type(self.span(), &value_expression)?,
+            try_parse_expression_type(
+                &self.function_return_type_cache,
+                self.span(),
+                &value_expression,
+            )?,
         ) {
             (Some(explicit_ty), Some(implicit_ty)) if explicit_ty != implicit_ty => {
                 return Err(ParserError::IncorrectType(
@@ -350,7 +358,7 @@ impl Parser {
         })
     }
 
-    fn parse_function(&mut self) -> Result<Statement, ParserError> {
+    fn parse_function_declaration(&mut self) -> Result<Statement, ParserError> {
         let token = self.advance_token();
         let identifier = match token.kind {
             TokenKind::Identifier(identifier) => identifier,
@@ -359,11 +367,28 @@ impl Parser {
 
         let args = self.parse_function_args()?;
 
+        // Parse return type
+        let mut ty = None;
+
+        if self.current_token() == &TokenKind::Operator(Operator::Arrow) {
+            self.advance_token();
+
+            ty = match self.advance_token().kind {
+                TokenKind::Identifier(type_identifier) => Some(Type::from(type_identifier)),
+                _ => return Err(ParserError::ExpectedValidIdentifier(token.span)),
+            };
+        }
+
+        // Parse body
         let body = self.parse_body()?;
+
+        self.function_return_type_cache
+            .insert(identifier.clone(), ty.clone());
 
         Ok(Statement::FunctionDeclaration {
             name: identifier,
             args,
+            return_type: ty,
             body: Box::new(body),
         })
     }
@@ -610,6 +635,7 @@ impl Parser {
 }
 
 fn try_parse_expression_type(
+    function_type_cache: &HashMap<String, Option<Type>>,
     span: Span,
     expression: &Expression,
 ) -> Result<Option<Type>, ParserError> {
@@ -619,8 +645,8 @@ fn try_parse_expression_type(
             v.ty().map_err(|_| ParserError::InvalidType(span))?
         }
         Expression::Binary(a, op, b) => {
-            let a = try_parse_expression_type(span, a)?;
-            let b = try_parse_expression_type(span, b)?;
+            let a = try_parse_expression_type(function_type_cache, span, a)?;
+            let b = try_parse_expression_type(function_type_cache, span, b)?;
 
             if !op.is_logical() && a != b {
                 return Ok(None);
@@ -628,7 +654,11 @@ fn try_parse_expression_type(
 
             a.ok_or(ParserError::InvalidType(span))?
         }
-        Expression::Unary(_, v) => return try_parse_expression_type(span, v),
+        Expression::Call(name, _) => match function_type_cache.get(name) {
+            Some(ty) if ty.is_some() => ty.clone().unwrap(),
+            _ => return Ok(None),
+        },
+        Expression::Unary(_, v) => return try_parse_expression_type(function_type_cache, span, v),
         _ => return Ok(None),
     };
 

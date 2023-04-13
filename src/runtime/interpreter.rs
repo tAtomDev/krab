@@ -19,6 +19,8 @@ pub enum RuntimeError {
 
     #[error("Runtime Error: illegal control flow syntax")]
     IllegalControlFlowStatement,
+    #[error("Runtime Error: function returning incorrect type")]
+    InvalidReturnType,
 
     #[error("Runtime Error: invalid type arithmetic")]
     InvalidType,
@@ -122,22 +124,18 @@ impl Interpreter {
 
         for node in program {
             last_value = match node {
-                Node::Statement(statement) => {
-                    let result = self.evaluate_statement(statement)?;
-                    match &result {
-                        EvalResult::Value(_) => EvalResult::Value(Value::Nothing),
-                        EvalResult::ControlFlow(..) => {
-                            let not_within_a_block = self.environment.parent.is_none();
-                            if not_within_a_block {
-                                return Err(RuntimeError::IllegalControlFlowStatement);
-                            }
-
-                            return Ok(result);
-                        }
-                    }
-                }
+                Node::Statement(statement) => self.evaluate_statement(statement)?,
                 Node::Expression(expression) => self.evaluate_expression(expression)?,
                 Node::Empty => EvalResult::Value(Value::Nothing),
+            };
+
+            if let EvalResult::ControlFlow(..) = &last_value {
+                let not_within_a_block = self.environment.parent.is_none();
+                if not_within_a_block {
+                    return Err(RuntimeError::IllegalControlFlowStatement);
+                }
+
+                return Ok(last_value);
             };
         }
 
@@ -193,8 +191,14 @@ impl Interpreter {
                 let result = self.evaluate_expression(expression)?.parse_value()?;
                 EvalResult::ControlFlow(ControlFlow::Return, Some(result))
             }
-            Statement::FunctionDeclaration { name, args, body } => {
-                self.environment.declare_function(name, args, body)?;
+            Statement::FunctionDeclaration {
+                name,
+                args,
+                return_type,
+                body,
+            } => {
+                self.environment
+                    .declare_function(name, args, return_type, body)?;
 
                 EvalResult::Value(Value::Nothing)
             }
@@ -327,7 +331,7 @@ impl Interpreter {
                     return Ok(EvalResult::Value(value.unwrap_or(Value::Nothing)));
                 }
 
-                let function = self.environment.get_function(name)?.clone();
+                let function = self.environment.get_function(&name)?.clone();
                 let function_body = *function.body;
 
                 let result = match function_body {
@@ -353,6 +357,8 @@ impl Interpreter {
                             self.environment
                                 .declare_variable(func_arg.1, func_arg.0, arg.1, false)?;
                         }
+
+                        // Evaluate body
                         let res = self.evaluate(body)?;
                         self.downgrade_environment_scope();
 
@@ -361,16 +367,27 @@ impl Interpreter {
                     _ => return Err(RuntimeError::InvalidFunctionBody),
                 };
 
-                match result {
-                    EvalResult::Value(value) => EvalResult::Value(value),
+                let result_value = match result {
+                    EvalResult::Value(value) => value,
                     EvalResult::ControlFlow(flow, value) => {
                         if flow != ControlFlow::Return {
                             return Err(RuntimeError::IllegalControlFlowStatement);
                         }
 
-                        EvalResult::Value(value.unwrap_or(Value::Nothing))
+                        value.unwrap_or(Value::Nothing)
                     }
+                };
+
+                let value_ty = match result_value.ty() {
+                    Ok(ty) => Some(ty),
+                    _ => None,
+                };
+
+                if value_ty != function.return_type {
+                    return Err(RuntimeError::InvalidReturnType);
                 }
+
+                EvalResult::Value(result_value)
             }
         };
 

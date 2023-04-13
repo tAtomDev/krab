@@ -17,6 +17,7 @@ pub struct Variable {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Function {
     pub args: Vec<(Type, String)>,
+    pub return_type: Option<Type>,
     pub body: Box<Expression>,
 }
 
@@ -38,7 +39,7 @@ impl Environment {
             functions: HashMap::new(),
             native_functions: parent
                 .as_ref()
-                .and_then(|p| Some(p.native_functions.clone()))
+                .map(|p| p.native_functions.clone())
                 .unwrap_or_default(),
         }
     }
@@ -47,6 +48,7 @@ impl Environment {
         &mut self,
         function_name: impl Into<String>,
         args: Vec<(Type, String)>,
+        return_type: Option<Type>,
         body: Box<Expression>,
     ) -> Result<(), RuntimeError> {
         let name = function_name.into();
@@ -58,7 +60,14 @@ impl Environment {
             return Err(RuntimeError::CannotRedeclareFunction(name));
         }
 
-        self.functions.insert(name, Function { args, body });
+        self.functions.insert(
+            name,
+            Function {
+                return_type,
+                args,
+                body,
+            },
+        );
 
         Ok(())
     }

@@ -27,7 +27,7 @@ let y = 3.14;
 const z = true;
 
 // Define a function
-fn add(a: int, b: int) {
+fn add(a: int, b: int) -> int {
     // Return without semicolon
     a + b 
 }
