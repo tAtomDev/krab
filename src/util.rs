@@ -1,3 +1,7 @@
-pub fn can_lexer_skip(character: char) -> bool {
-    character.is_whitespace() || !character.is_ascii_alphanumeric()
+pub fn is_vec_all_same<T: PartialEq>(v: &[T]) -> bool {
+    if let Some(first) = v.first() {
+        v.iter().all(|x| x == first)
+    } else {
+        true
+    }
 }

@@ -1,355 +1,250 @@
 use crate::{
-    common::{tokens::*, Span},
-    util,
+    ast::{tokens::*, *},
+    error::LexicalError,
 };
-
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum LexicalError {
-    #[error("missing '{0}' at end of string literal at {1}")]
-    MissingAtEndOfStringLiteral(char, Span),
-    #[error("invalid floating point literal at {0}")]
-    InvalidFloatLiteral(Span),
-    #[error("invalid or unexpected identifier character '{0}' at {1}")]
-    InvalidIdentifierCharacter(char, Span),
-    #[error("invalid identifier at {0}")]
-    InvalidIdentifier(Span),
-    #[error("invalid or illegal literal value at {0}")]
-    InvalidLiteral(Span),
-}
 
 pub struct Lexer {
     source: Vec<char>,
-    position: usize,
-    char_pos: usize,
-    loc: usize,
-    current_span_loc: usize,
-    waiting_for_identifier: bool,
+    loc: u32,
+    line_pos: u32,
+    pos: usize,
 }
 
 impl Lexer {
-    pub fn new(code: impl Into<String>) -> Self {
-        let code = code.into();
+    pub fn new(source: impl Into<String>) -> Self {
+        let source = source.into();
         Self {
-            source: code.chars().collect(),
-            position: 0,
-            char_pos: 0,
+            source: source.chars().collect(),
             loc: 1,
-            current_span_loc: 0,
-            waiting_for_identifier: false,
+            line_pos: 1,
+            pos: 0,
         }
     }
 
     pub fn lex(&mut self) -> Result<Vec<Token>, LexicalError> {
-        let mut tokens: Vec<Token> = Vec::new();
-
-        while !self.is_at_end() {
-            let token = self.scan_token()?;
-
-            if token.kind == TokenKind::Invalid {
-                continue;
-            }
-
+        let mut tokens = Vec::new();
+        while let Some(token) = self.scan_token()? {
             tokens.push(token);
         }
 
-        if !tokens.ends_with(&[Token::EOF]) {
-            tokens.push(Token::EOF);
-        }
+        tokens.push(Token::EOF);
 
         Ok(tokens)
     }
 
     fn make_span(&self) -> Span {
-        Span::new(self.char_pos, self.char_pos, self.current_span_loc)
+        Span::new(self.loc, self.line_pos, self.pos as u32)
     }
 
     fn advance_pos(&mut self) {
-        if self.current_char() == '\n' {
-            self.char_pos = 0;
-            self.loc += 1;
-        }
+        self.pos += 1;
 
-        self.position += 1;
-        self.char_pos += 1;
+        if self.current_char() == '\n' || self.current_char() == '\r' {
+            self.line_pos = 1;
+            self.loc += 1;
+        } else {
+            self.line_pos += 1;
+        }
+    }
+
+    fn advance_multiple_positions(&mut self, positions: usize) {
+        (0..positions).for_each(|_| self.advance_pos());
     }
 
     fn advance_char(&mut self) -> char {
+        let char = self.current_char();
         self.advance_pos();
 
-        *self.source.get(self.position - 1).unwrap()
+        char
     }
 
     fn current_char(&self) -> char {
-        if self.is_at_end() {
-            '\0'
-        } else {
-            *self.source.get(self.position).unwrap()
-        }
+        self.source.get(self.pos).copied().unwrap_or('\0')
     }
 
-    fn check_char_and_advance(&mut self, char: char) -> bool {
-        if self.current_char() == char {
-            self.advance_pos();
-
-            return true;
-        }
-
-        false
+    fn current_and_next_chars(&self, number: usize) -> Vec<char> {
+        self.source[self.pos..]
+            .iter()
+            .take(number)
+            .copied()
+            .collect()
     }
 
     fn is_at_end(&self) -> bool {
-        self.position >= self.source.len()
+        self.current_char() == '\0'
     }
 
-    fn scan_token(&mut self) -> Result<Token, LexicalError> {
+    fn check_char_and_advance(&mut self, ch: char) -> bool {
+        if self.current_char() == ch {
+            self.advance_pos();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn check_string_and_advance(&mut self, base_char: char, string: &str) -> bool {
+        let size = string.chars().count() - 1;
+
+        let next_string = [base_char]
+            .iter()
+            .chain(self.current_and_next_chars(size).iter())
+            .collect::<String>();
+
+        if next_string == string {
+            self.advance_multiple_positions(size);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn scan_token(&mut self) -> Result<Option<Token>, LexicalError> {
         if self.is_at_end() {
-            return Ok(Token::EOF);
+            return Ok(None);
         }
 
-        let start = self.char_pos;
-        let loc = self.loc;
-
-        self.current_span_loc = loc;
+        let span = self.make_span();
 
         let c = self.advance_char();
 
         if c == '/' && self.check_char_and_advance('/') {
             // This is a single-line comment, so we skip until the end of the line.
             while !self.is_at_end() && self.current_char() != '\n' {
-                self.advance_char();
+                self.advance_pos();
             }
 
-            // We continue scanning for the next token.
             return self.scan_token();
         }
 
-        let token_kind = match c {
-            '(' => TokenKind::Punctuation(Punctuation::OpenParenthesis),
-            ')' => TokenKind::Punctuation(Punctuation::CloseParenthesis),
-            '[' => TokenKind::Punctuation(Punctuation::OpenBrackets),
-            ']' => TokenKind::Punctuation(Punctuation::CloseBrackets),
-            '{' => TokenKind::Punctuation(Punctuation::OpenBrace),
-            '}' => TokenKind::Punctuation(Punctuation::CloseBrace),
-            ';' => TokenKind::Punctuation(Punctuation::Semicolon),
-            ':' => TokenKind::Punctuation(Punctuation::Colon),
-            ',' => TokenKind::Punctuation(Punctuation::Comma),
-            '.' => TokenKind::Punctuation(Punctuation::Dot),
-            '?' => TokenKind::Punctuation(Punctuation::QuestionMark),
-
-            '+' => TokenKind::Operator(Operator::Add),
-            '-' => {
-                if self.check_char_and_advance('>') {
-                    TokenKind::Operator(Operator::Arrow)
-                } else {
-                    TokenKind::Operator(Operator::Subtract)
-                }
+        // Lex punctuations
+        for punctuation in PUNCTUATIONS.iter() {
+            let punc = punctuation.to_string();
+            if self.check_string_and_advance(c, &punc) {
+                return Ok(Some(Token::new(span, TokenKind::Punctuation(*punctuation))));
             }
-            '*' => TokenKind::Operator(Operator::Multiply),
-            '/' => {
-                if self.check_char_and_advance('/') {
-                    // Ignore single-line comments
-                    while !self.is_at_end() && self.current_char() != '\n' {
-                        self.advance_char();
+        }
+
+        // Lex operators
+        for operator in OPERATORS.iter() {
+            let op = operator.to_string();
+            if self.check_string_and_advance(c, &op) {
+                return Ok(Some(Token::new(span, TokenKind::Operator(*operator))));
+            }
+        }
+
+        // Lex keywords
+        for keyword in KEYWORDS.iter() {
+            let kw = keyword.to_string();
+            if self.check_string_and_advance(c, &kw) {
+                return Ok(Some(Token::new(span, TokenKind::Keyword(keyword.clone()))));
+            }
+        }
+
+        match c {
+            ' ' | '\n' | '\r' => self.scan_token(),
+            // Lex string literals
+            '\'' | '"' => {
+                let quote = c;
+                let mut string = String::new();
+                let mut backslash = false;
+
+                loop {
+                    if self.is_at_end() {
+                        return Err(LexicalError::MissingAtEndOfStringLiteral(quote, span));
                     }
 
-                    TokenKind::Invalid
-                } else if self.check_char_and_advance('*') {
-                    // Ignore multi-line comments
-                    let mut comment_level = 1;
-                    while comment_level > 0 && !self.is_at_end() {
-                        let c1 = self.advance_char();
-                        let c2 = self.current_char();
-                        if c1 == '*' && c2 == '/' {
-                            self.advance_char();
-                            comment_level -= 1;
-                        } else if c1 == '/' && c2 == '*' {
-                            self.advance_char();
-                            comment_level += 1;
+                    let c = self.advance_char();
+                    if c == '\\' && !backslash {
+                        backslash = true;
+                        continue;
+                    }
+
+                    if c == quote && !backslash {
+                        break;
+                    }
+
+                    backslash = false;
+                    string.push(c);
+                }
+
+                let token_kind = TokenKind::Literal(Literal::String(string));
+                Ok(Some(Token::new(span, token_kind)))
+            }
+            // Lex number literals
+            c if c.is_ascii_digit() => {
+                let mut number_string = String::from(c);
+                let mut is_float_literal = false;
+                loop {
+                    let c = self.current_char();
+                    if c.is_ascii_digit() {
+                        number_string.push(c);
+                    } else if c == '.' {
+                        // Check if float literal doesn't contains two .
+                        if number_string.contains('.') {
+                            return Err(LexicalError::InvalidFloatLiteral(self.make_span()));
                         }
+                        is_float_literal = true;
+                        number_string.push(c);
+                    } else {
+                        break;
                     }
 
-                    TokenKind::Invalid
-                } else {
-                    TokenKind::Operator(Operator::Divide)
-                }
-            }
-            '%' => TokenKind::Operator(Operator::Modulo),
-            '^' => TokenKind::Operator(Operator::Power),
-            '!' => {
-                if self.check_char_and_advance('=') {
-                    TokenKind::Operator(Operator::NotEqual)
-                } else {
-                    TokenKind::Operator(Operator::Not)
-                }
-            }
-
-            '=' => {
-                if self.check_char_and_advance('=') {
-                    TokenKind::Operator(Operator::Equal)
-                } else {
-                    TokenKind::Operator(Operator::Assignment)
-                }
-            }
-            '>' => {
-                if self.check_char_and_advance('=') {
-                    TokenKind::Operator(Operator::GreaterOrEqual)
-                } else {
-                    TokenKind::Operator(Operator::Greater)
-                }
-            }
-            '<' => {
-                if self.check_char_and_advance('=') {
-                    TokenKind::Operator(Operator::LessOrEqual)
-                } else {
-                    TokenKind::Operator(Operator::Less)
-                }
-            }
-
-            c if c == '&' && self.check_char_and_advance('&') => TokenKind::Operator(Operator::And),
-            c if c == '|' && self.check_char_and_advance('|') => TokenKind::Operator(Operator::Or),
-
-            '"' | '\'' => self.string(c)?,
-            c if c.is_ascii_digit() => self.number(c)?,
-            c if c.is_alphabetic() || c == '_' => self.keyword_or_identifier(c)?,
-            _ => TokenKind::Invalid,
-        };
-
-        if let TokenKind::Keyword(keyword) = &token_kind {
-            match keyword {
-                Keyword::Function | Keyword::Let => self.waiting_for_identifier = true,
-                _ => {}
-            }
-        }
-
-        let end = self.char_pos;
-        let span = Span::new(start, end, loc);
-
-        let token = Token::new(token_kind, span);
-
-        Ok(token)
-    }
-
-    fn string(&mut self, quote: char) -> Result<TokenKind, LexicalError> {
-        let mut string = String::new();
-        let mut failed = true;
-
-        while !self.is_at_end() {
-            if self.current_char() == quote {
-                failed = false;
-                self.advance_char();
-                break;
-            }
-
-            string.push(self.advance_char());
-        }
-
-        if failed {
-            return Err(LexicalError::MissingAtEndOfStringLiteral(
-                quote,
-                self.make_span(),
-            ));
-        }
-
-        Ok(TokenKind::Literal(Literal::String(string)))
-    }
-
-    fn number(&mut self, first_number: char) -> Result<TokenKind, LexicalError> {
-        let mut string = String::new();
-        let mut is_float = false;
-
-        string.push(first_number);
-
-        while !self.is_at_end() {
-            if self.current_char() == '.' {
-                if is_float {
-                    return Err(LexicalError::InvalidFloatLiteral(self.make_span()));
+                    self.advance_char();
                 }
 
-                is_float = true;
-            } else if !self.current_char().is_ascii_digit() {
-                break;
+                let token_kind = TokenKind::Literal(match is_float_literal {
+                    true => Literal::Float(
+                        number_string
+                            .parse()
+                            .map_err(|_| LexicalError::InvalidFloatLiteral(span))?,
+                    ),
+                    false => Literal::Integer(
+                        number_string
+                            .parse()
+                            .map_err(|_| LexicalError::InvalidIntegerLiteral(span))?,
+                    ),
+                });
+
+                Ok(Some(Token::new(span, token_kind)))
             }
+            c if c.is_ascii() && (!c.is_ascii_punctuation() || c == '_') => {
+                let mut string = String::from(c);
 
-            string.push(self.advance_char());
-        }
+                while !self.is_at_end() {
+                    let current_char = self.current_char();
+                    if current_char == ' '
+                        || current_char == '\n'
+                        || current_char == '\r'
+                        || (current_char != '_' && current_char.is_ascii_punctuation())
+                    {
+                        break;
+                    }
 
-        if is_float {
-            Ok(TokenKind::Literal(Literal::Float(
-                string
-                    .parse::<f32>()
-                    .map_err(|_| LexicalError::InvalidLiteral(self.make_span()))?,
-            )))
-        } else {
-            Ok(TokenKind::Literal(Literal::Integer(
-                string
-                    .parse::<i32>()
-                    .map_err(|_| LexicalError::InvalidLiteral(self.make_span()))?,
-            )))
-        }
-    }
+                    if current_char != '_' && current_char.is_ascii_punctuation() {
+                        return Err(LexicalError::InvalidIdentifierCharacter(
+                            current_char,
+                            self.make_span(),
+                        ));
+                    }
 
-    fn keyword_or_identifier(&mut self, char: char) -> Result<TokenKind, LexicalError> {
-        let mut string = String::new();
+                    string.push(self.advance_char());
+                }
 
-        string.push(char);
+                if string.is_empty() {
+                    return Err(LexicalError::InvalidIdentifier(span));
+                }
 
-        while !self.is_at_end() {
-            let current_char = self.current_char();
-            if util::can_lexer_skip(current_char) {
-                break;
+                let token_kind = match string.as_str() {
+                    "true" => TokenKind::Literal(Literal::Boolean(true)),
+                    "false" => TokenKind::Literal(Literal::Boolean(false)),
+                    _ => TokenKind::Identifier(string),
+                };
+
+                Ok(Some(Token::new(span, token_kind)))
             }
-
-            string.push(self.advance_char());
+            _ => Err(LexicalError::UnexpectedCharacter(c, span)),
         }
-
-        let token_kind = match string.as_str() {
-            "let" => TokenKind::Keyword(Keyword::Let),
-            "const" => TokenKind::Keyword(Keyword::Const),
-            "if" => TokenKind::Keyword(Keyword::If),
-            "else" => TokenKind::Keyword(Keyword::Else),
-            "while" => TokenKind::Keyword(Keyword::While),
-            "fn" => TokenKind::Keyword(Keyword::Function),
-            "return" => TokenKind::Keyword(Keyword::Return),
-            "break" => TokenKind::Keyword(Keyword::Break),
-            "continue" => TokenKind::Keyword(Keyword::Continue),
-
-            "true" => TokenKind::Literal(Literal::Boolean(true)),
-            "false" => TokenKind::Literal(Literal::Boolean(false)),
-
-            _ => self.identifier(string)?,
-        };
-
-        Ok(token_kind)
-    }
-
-    fn identifier(&mut self, mut string: String) -> Result<TokenKind, LexicalError> {
-        while !self.is_at_end() {
-            let current_char = self.current_char();
-
-            if current_char == ';' || current_char != '_' && util::can_lexer_skip(current_char) {
-                break;
-            }
-
-            if !current_char.is_ascii_whitespace()
-                && current_char != '_'
-                && !current_char.is_ascii_alphanumeric()
-            {
-                return Err(LexicalError::InvalidIdentifierCharacter(
-                    current_char,
-                    self.make_span(),
-                ));
-            }
-
-            string.push(self.advance_char());
-        }
-
-        if string.is_empty() {
-            return Err(LexicalError::InvalidIdentifier(self.make_span()));
-        }
-
-        Ok(TokenKind::Identifier(string))
     }
 }
 
@@ -499,7 +394,7 @@ mod tests {
                 Punctuation(Colon),
                 Identifier("i32".into()),
                 Punctuation(CloseParenthesis),
-                Operator(Arrow),
+                Punctuation(Arrow),
                 Identifier("i32".into()),
                 Punctuation(OpenBrace),
                 Keyword(Return),
@@ -575,7 +470,7 @@ mod tests {
                 Punctuation(Colon),
                 Identifier("i32".into()),
                 Punctuation(CloseParenthesis),
-                Operator(Arrow),
+                Punctuation(Arrow),
                 Identifier("bool".into()),
                 Punctuation(OpenBrace),
                 Keyword(If),

@@ -1,26 +1,16 @@
-use colored::Colorize;
+use std::io::{self, Write};
 
 use krab::prelude::*;
 
-use std::{
-    fs::File,
-    io::{self, BufReader, Read, Write},
-};
-
 fn main() {
-    print!("{}", "".normal().clear());
-    println!(
-        "{}\n{}",
-        "- Krab 0.1 REPL".green().bold(),
-        "Type 'exit' to leave or 'clear' to clear the terminal".green()
-    );
+    println!("- Krab 0.2 REPL\nType 'exit' to leave");
 
-    let mut interpreter = Interpreter::new();
+    let mut engine = Engine::new();
     let mut buffer = String::with_capacity(2048);
 
     loop {
         buffer.clear();
-        print!("{} ", ">".bright_white().bold());
+        print!("> ");
         io::stdout().flush().unwrap();
 
         match io::stdin().read_line(&mut buffer) {
@@ -30,6 +20,7 @@ fn main() {
                 continue;
             }
         }
+
         buffer = buffer.trim().into();
         if buffer == "exit" {
             break;
@@ -37,12 +28,9 @@ fn main() {
 
         io::stdout().flush().unwrap();
 
-        if buffer == "clear" {
-            continue;
-        }
-
         if buffer.starts_with("/lex") {
             buffer = buffer.split_off(4);
+
             let lex = Lexer::new(&buffer).lex();
             println!("{lex:?}");
             continue;
@@ -50,65 +38,43 @@ fn main() {
 
         if buffer.starts_with("/parse") {
             buffer = buffer.split_off(6);
-            let program = Parser::new(Lexer::new(&buffer).lex().unwrap()).parse();
+            let program =
+                Parser::new(Lexer::new(&buffer).lex().unwrap(), TypeCache::new_empty()).parse_ast();
             println!("{program:?}");
             continue;
         }
 
-        if buffer.starts_with("/vars") {
-            if interpreter.environment.variables.is_empty() {
-                println!("No variables declared");
-                continue;
-            }
-
-            let variables = interpreter.environment.variables.iter().fold(
-                String::new(),
-                |acc, (name, variable)| {
-                    format!(
-                        "{acc}\n{} {name}: {} = {:?}",
-                        if variable.is_const { "const" } else { "let" },
-                        variable.ty,
-                        variable.value
-                    )
-                },
-            );
-
-            println!("{}", variables.trim().cyan());
-            continue;
-        }
-
-        if buffer.ends_with(".krab") {
-            let Ok(file) = File::open(&buffer) else {
-                println!("File not found");
-                continue;
+        if buffer.ends_with(".krab") || buffer.starts_with("./") {
+            let success = match engine.load_file(&buffer) {
+                Ok(success) => success,
+                Err(err) => {
+                    eprintln!("{err}");
+                    continue;
+                }
             };
 
-            let mut buf_reader = BufReader::new(file);
-            let mut content = String::with_capacity(1024);
-
-            buf_reader.read_to_string(&mut content).unwrap();
-            buffer = content;
-        }
-
-        let value = match interpreter.evaluate_source(&buffer) {
-            Ok(v) => v.parse_value(),
-            Err(e) => {
-                eprintln!("{}", e.to_string().red());
+            if !success {
+                println!("File not found");
                 continue;
             }
+        } else if let Err(e) = engine.load_source(&buffer) {
+            eprintln!("{}", e);
+            continue;
         };
 
-        let value = match value {
-            Ok(v) => v,
+        let eval = engine.eval_ast();
+
+        match eval {
             Err(e) => {
-                eprintln!("{}", e.to_string().red());
+                eprintln!("RuntimeError: {e}");
                 continue;
             }
+            Ok(value) => {
+                if value != Value::Unit {
+                    println!("{:?}", value)
+                }
+            }
         };
-
-        if value != Value::Nothing {
-            println!("{}", value.to_string().yellow());
-        }
     }
 
     println!("REPL EXITED");

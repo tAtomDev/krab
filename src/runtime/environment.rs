@@ -1,192 +1,112 @@
-use std::collections::HashMap;
-
 use crate::{
-    common::{Type, Value},
-    core::ast::Expression,
+    ast::Expression,
+    error::RuntimeError,
+    types::{Ident, Signature, TypedIdent, Value},
 };
 
-use super::RuntimeError;
+use super::{variable::AccessModifier, Function, Scope, Variable};
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct Variable {
-    pub ty: Type,
-    pub value: Value,
-    pub is_const: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct Function {
-    pub args: Vec<(Type, String)>,
-    pub return_type: Option<Type>,
-    pub body: Box<Expression>,
-}
-
-type NativeFunction = fn(&mut Environment, Vec<Value>) -> Option<Value>;
-
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-    pub parent: Option<Box<Environment>>,
-    pub variables: HashMap<String, Variable>,
-    pub functions: HashMap<String, Function>,
-    pub native_functions: HashMap<String, NativeFunction>,
+    pub scopes: Vec<Scope>,
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self {
+            scopes: vec![Scope::new_empty()],
+        }
+    }
 }
 
 impl Environment {
-    pub fn new(parent: Option<Box<Environment>>) -> Self {
-        Self {
-            parent: parent.clone(),
-            variables: HashMap::new(),
-            functions: HashMap::new(),
-            native_functions: parent
-                .as_ref()
-                .map(|p| p.native_functions.clone())
-                .unwrap_or_default(),
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn scope(&mut self) -> &mut Scope {
+        if self.scopes.is_empty() {
+            self.push_scope();
         }
+
+        self.scopes.last_mut().unwrap()
+    }
+
+    pub fn push_scope(&mut self) {
+        self.scopes.push(Scope::new_empty());
+    }
+
+    pub fn pop_scope(&mut self) {
+        self.scopes.pop();
     }
 
     pub fn declare_function(
         &mut self,
-        function_name: impl Into<String>,
-        args: Vec<(Type, String)>,
-        return_type: Option<Type>,
-        body: Box<Expression>,
+        sig: Signature,
+        expression: Expression,
     ) -> Result<(), RuntimeError> {
-        let name = function_name.into();
-        if self.functions.contains_key(&name) {
-            return Err(RuntimeError::CannotRedeclareFunction(name));
-        }
+        let scope = self.scope();
+        let function = Function::new(sig, Box::new(expression));
 
-        if self.native_functions.contains_key(&name) {
-            return Err(RuntimeError::CannotRedeclareFunction(name));
-        }
-
-        self.functions.insert(
-            name,
-            Function {
-                return_type,
-                args,
-                body,
-            },
-        );
-
-        Ok(())
+        scope.declare_function(function)
     }
 
-    pub fn register_native_function(
-        &mut self,
-        name: impl Into<String>,
-        function: NativeFunction,
-    ) -> Result<(), RuntimeError> {
+    pub fn get_function_mut(&mut self, name: impl Into<String>) -> Option<&mut Function> {
         let name = name.into();
-        if self.functions.contains_key(&name) {
-            return Err(RuntimeError::CannotRedeclareFunction(name));
-        }
 
-        if self.native_functions.contains_key(&name) {
-            return Err(RuntimeError::CannotRedeclareFunction(name));
-        }
-
-        self.native_functions.insert(name, function);
-
-        Ok(())
+        self.scopes
+            .iter_mut()
+            .rev()
+            .find_map(|v| v.get_function_mut(&name))
     }
 
-    pub fn get_native_function(&self, function_name: impl Into<String>) -> Option<NativeFunction> {
-        self.native_functions.get(&function_name.into()).cloned()
+    pub fn get_function(&self, name: impl Into<String>) -> Option<&Function> {
+        let name = name.into();
+
+        self.scopes.iter().rev().find_map(|v| v.get_function(&name))
     }
 
     pub fn declare_variable(
         &mut self,
-        variable_name: impl Into<String>,
-        ty: Type,
+        access_modifier: AccessModifier,
+        typed_ident: TypedIdent,
         value: Value,
-        is_const: bool,
     ) -> Result<(), RuntimeError> {
-        let variable_name = variable_name.into();
-        if self.variables.contains_key(&variable_name) {
-            return Err(RuntimeError::CannotRedeclareVariable(variable_name));
-        }
+        let scope = self.scope();
+        let variable = Variable::new(access_modifier, typed_ident, value);
 
-        self.variables.insert(
-            variable_name,
-            Variable {
-                ty,
-                value,
-                is_const,
-            },
-        );
-
-        Ok(())
+        scope.declare_variable(variable)
     }
 
-    pub fn assign_variable(
-        &mut self,
-        variable_name: impl Into<String>,
-        value: Value,
-    ) -> Result<(), RuntimeError> {
-        let variable_name = variable_name.into();
+    pub fn assign_variable(&mut self, ident: Ident, value: Value) -> Result<(), RuntimeError> {
+        let variable = self
+            .get_variable_mut(&ident.name)
+            .ok_or(RuntimeError::VariableNotFound(ident.clone(), ident.span))?;
 
-        // Try to get the mutable variable from this environment
-        let Some(variable) = self.variables.get_mut(&variable_name) else {
-            // If it doesn't exists, try assigning it in the parent environment
-            if let Some(parent) = &mut self.parent {
-                return parent.assign_variable(variable_name, value)
-            }
-
-            return Err(RuntimeError::VariableNotFound(variable_name));
-        };
-
-        if variable.is_const {
-            return Err(RuntimeError::CannotReassignConstVariable(variable_name));
-        }
-
-        // Check if variables are of the same type
-        let value_ty = value.ty().map_err(|_| RuntimeError::UnknownType)?;
-        if variable.ty != value_ty {
-            return Err(RuntimeError::CannotReassignDifferentType(variable_name));
+        if variable.ty != value.ty() {
+            return Err(RuntimeError::CannotReassignDifferentType(
+                ident.clone(),
+                ident.span,
+            ));
         }
 
         variable.value = value;
+
         Ok(())
     }
 
-    pub fn get_variable(
-        &self,
-        variable_name: impl Into<String>,
-    ) -> Result<&Variable, RuntimeError> {
-        let variable_name = variable_name.into();
+    pub fn get_variable_mut(&mut self, name: impl Into<String>) -> Option<&mut Variable> {
+        let name = name.into();
 
-        // Try to get the variable from this environment
-        if let Some(variable) = self.variables.get(&variable_name) {
-            return Ok(variable);
-        };
-
-        // If nothing was found, try to get the variable from the parent environment
-        if let Some(parent) = &self.parent {
-            return parent.get_variable(variable_name);
-        }
-
-        // Trying to access an variable that was not defined
-        Err(RuntimeError::VariableNotFound(variable_name))
+        self.scopes
+            .iter_mut()
+            .rev()
+            .find_map(|v| v.get_variable_mut(&name))
     }
 
-    pub fn get_function(
-        &self,
-        function_name: impl Into<String>,
-    ) -> Result<&Function, RuntimeError> {
-        let function_name = function_name.into();
+    pub fn get_variable(&self, name: impl Into<String>) -> Option<&Variable> {
+        let name = name.into();
 
-        // Try to get the variable from this environment
-        if let Some(function) = self.functions.get(&function_name) {
-            return Ok(function);
-        };
-
-        // If nothing was found, try to get the variable from the parent environment
-        if let Some(parent) = &self.parent {
-            return parent.get_function(function_name);
-        }
-
-        // Trying to access an variable that was not defined
-        Err(RuntimeError::FunctionNotFound(function_name))
+        self.scopes.iter().rev().find_map(|v| v.get_variable(&name))
     }
 }

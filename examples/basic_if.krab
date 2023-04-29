@@ -1,9 +1,0 @@
-let test = 10;
-
-if test == 10 {
-    "10"
-} else if test == 69 {
-    "69"
-} else {
-    "bad number"
-}

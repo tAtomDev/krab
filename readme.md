@@ -10,7 +10,6 @@ Krab is a simple and minimalistic interpreted programming language written in Ru
 - Control flow: if, while, break, continue
 - Functions: fn and return
 - Expressions: arithmetic, logical and comparison operators
-- Native function: print()
 
 ## Syntax
 
@@ -35,9 +34,6 @@ fn add(a: int, b: int) -> int {
 // Call a function
 let result = add(x, 8);
 
-// Print to stdout
-print(result);
-
 // Use if as an expression
 let max = if x > y {
     x // No semicolon here!
@@ -48,7 +44,6 @@ let max = if x > y {
 // Use while loop for iteration
 let i = 0;
 while i < 10 {
-    print(i);
     i = i + 1;
 }
 ```
@@ -59,8 +54,8 @@ This will launch a REPL where you can write Krab code interactively. You can als
 
 ```bash
 $ cargo run
-- Krab 0.1 REPL
-Type 'exit' to leave or 'clear' to clear the terminal
+- Krab 0.2 REPL
+Type 'exit' to leave
 > ./code.krab
 Hello from Krab!
 > 5 + 5

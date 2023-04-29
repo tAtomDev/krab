@@ -1,0 +1,18 @@
+fn add(x: int, y: int) -> int {
+    // Useless if for testing reasons
+    if x == 0 && y == 0 {
+        return 0;
+    }
+
+    x + y
+}
+
+fn divide(x: int, y: int) -> int {
+    if y == 0 {
+        return 0;
+    } else {
+        x / y
+    }
+}
+
+add(5, 16) + divide(5, 0) // 21 + 0 = 21
