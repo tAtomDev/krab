@@ -24,10 +24,7 @@ fn eval_expressions() {
 
 #[test]
 fn eval_logical() {
-    assert_eq!(
-        eval_file("./tests/test_logical.krab"),
-        Value::Boolean(true)
-    );
+    assert_eq!(eval_file("./tests/test_logical.krab"), Value::Boolean(true));
 }
 
 #[test]

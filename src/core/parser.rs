@@ -322,9 +322,6 @@ impl Parser {
                     .into());
                 }
 
-                // Pop function body scope
-                self.type_cache.pop_scope();
-
                 // Declare the function in the outer scope
                 self.type_cache.declare_function(
                     &identifier,
@@ -348,6 +345,28 @@ impl Parser {
                     },
                     body_expression,
                 )
+            }
+            Keyword::Struct => {
+                self.advance_token();
+
+                let identifier = parser_util::parse_identifier_token(self)?;
+                let identifier = Ident {
+                    name: identifier.0,
+                    span: identifier.1,
+                };
+
+                let fields = if self
+                    .consume_token_if_kind(&TokenKind::Punctuation(Punctuation::Semicolon))
+                {
+                    Vec::new()
+                } else {
+                    parser_util::parse_typed_identifiers(self, Punctuation::OpenBrace)?
+                };
+
+                self.type_cache
+                    .declare_struct(&identifier.name, &fields, token.span)?;
+
+                Statement::StructDeclaration(identifier, fields)
             }
             Keyword::Return => {
                 self.advance_token();
@@ -419,6 +438,7 @@ impl Parser {
     }
 
     pub fn parse_body_expression(&mut self) -> Result<Expression, SyntaxError> {
+        self.type_cache.push_scope();
         let expression = parser_util::parse_body_expression(self)?;
 
         Ok(expression)
@@ -554,6 +574,10 @@ impl Parser {
             TokenKind::Operator(op) if op.is_unary() => {
                 let rhs = self.parse_expression()?;
                 Ok(Expression::Unary(*op, Box::new(rhs)))
+            }
+            TokenKind::Punctuation(Punctuation::OpenBrace) => {
+                self.pos -= 1;
+                self.parse_body_expression()
             }
             _ => Err(SyntaxError::TryingToParseUnexpectedToken(
                 token.clone(),

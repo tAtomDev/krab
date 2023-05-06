@@ -20,6 +20,9 @@ impl Eval for Statement {
                     .env()
                     .declare_function(signature.clone(), body_expression.clone())?;
             }
+            Statement::StructDeclaration(ident, fields) => {
+                println!("{}\n{:?}", ident, fields)
+            }
             Statement::Assignment(ident, expression) => {
                 let value = expression
                     .eval(context)?

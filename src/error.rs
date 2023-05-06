@@ -48,6 +48,7 @@ impl Display for LexicalError {
 pub enum LogicalError {
     FunctionAlreadyExistsInScope(String, Span),
     VariableAlreadyExistsInScope(String, Span),
+    StructAlreadyExists(String, Span),
 
     VariableDoesNotExists(String, Span),
     FunctionDoesNotExists(String, Span),
@@ -69,6 +70,9 @@ impl Display for LogicalError {
             }
             LogicalError::VariableAlreadyExistsInScope(name, span) => {
                 write!(f, "Variable `{name}` already exists in scope at {span}")
+            }
+            LogicalError::StructAlreadyExists(name, span) => {
+                write!(f, "Struct `{name}` already exists at {span}")
             }
             LogicalError::VariableDoesNotExists(name, span) => {
                 write!(f, "Variable `{name}` does not exists at {span}")

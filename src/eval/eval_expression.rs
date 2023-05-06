@@ -150,6 +150,7 @@ impl Eval for Expression {
                 value
             }
             Expression::Body(body) => {
+                context.env().push_scope();
                 let mut last = Value::Unit;
                 for node in body {
                     last = match node.eval(context)? {
@@ -157,6 +158,8 @@ impl Eval for Expression {
                         EvalResult::ControlFlow(_flow, value) => return Ok(value.into()),
                     }
                 }
+
+                context.env().pop_scope();
 
                 last
             }

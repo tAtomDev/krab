@@ -16,12 +16,14 @@ pub struct TypeScope {
 #[derive(Debug, Clone)]
 pub struct TypeCache {
     pub scopes: Vec<TypeScope>,
+    pub structs: HashMap<String, Vec<TypedIdent>>,
 }
 
 impl Default for TypeCache {
     fn default() -> Self {
         Self {
             scopes: vec![TypeScope::default()],
+            structs: HashMap::new(),
         }
     }
 }
@@ -45,6 +47,20 @@ impl TypeCache {
 
     pub fn pop_scope(&mut self) {
         self.scopes.pop();
+    }
+
+    pub fn declare_struct(
+        &mut self,
+        name: &str,
+        fields: &[TypedIdent],
+        span: Span,
+    ) -> Result<(), LogicalError> {
+        if self.structs.contains_key(name) {
+            return Err(LogicalError::StructAlreadyExists(name.to_string(), span));
+        }
+
+        self.structs.insert(name.to_string(), fields.to_vec());
+        Ok(())
     }
 
     pub fn declare_function(

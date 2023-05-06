@@ -71,7 +71,9 @@ impl Expression {
             }
             Expression::While { body, .. } => return body.try_parse_type(type_cache, span),
             Expression::Body(_) => {
+                type_cache.push_scope();
                 let branches = self.branch_types(type_cache, span)?;
+                type_cache.pop_scope();
                 if !is_vec_all_same(&branches) {
                     return Err(SyntaxError::IncorrectExpressionBranchTypes(branches, span));
                 }

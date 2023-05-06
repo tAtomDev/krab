@@ -272,6 +272,8 @@ pub enum Keyword {
     If,
     /// else
     Else,
+    /// struct
+    Struct,
     /// while
     While,
     /// fn
@@ -280,11 +282,12 @@ pub enum Keyword {
     Return,
 }
 
-pub const KEYWORDS: [Keyword; 7] = [
+pub const KEYWORDS: [Keyword; 8] = [
     Keyword::Let,
     Keyword::Const,
     Keyword::If,
     Keyword::Else,
+    Keyword::Struct,
     Keyword::While,
     Keyword::Function,
     Keyword::Return,
@@ -297,6 +300,7 @@ impl Display for Keyword {
             Self::Const => write!(f, "const"),
             Self::If => write!(f, "if"),
             Self::Else => write!(f, "else"),
+            Self::Struct => write!(f, "struct"),
             Self::While => write!(f, "while"),
             Self::Function => write!(f, "fn"),
             Self::Return => write!(f, "return"),

@@ -4,9 +4,10 @@ use super::Expression;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Statement {
-    Expression(Expression),
+    StructDeclaration(Ident, Vec<TypedIdent>),
     VariableDeclaration(TypedIdent, Expression),
-    Assignment(Ident, Expression),
     FunctionDeclaration(Signature, Expression),
+    Expression(Expression),
+    Assignment(Ident, Expression),
     Return(Expression),
 }
